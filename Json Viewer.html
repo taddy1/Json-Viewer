@@ -1,0 +1,2488 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JSON Viewer — 本地结构化查看器</title>
+<style>
+:root{
+  --bg:#eef1f5;
+  --panel:#ffffff;
+  --panel-2:#f7f9fb;
+  --border:#e1e5ea;
+  --border-soft:#eceff3;
+  --text:#1f2933;
+  --text-dim:#68727f;
+  --text-faint:#9aa3ae;
+  --accent:#2563eb;
+  --accent-soft:#e8f0fe;
+  --key:#0b5cad;
+  --str:#0a7d4f;
+  --num:#b45309;
+  --boo:#7c3aed;
+  --nul:#98a2b3;
+  --row-hover:#f4f7fc;
+  --row-line:rgba(15,23,42,.10);
+  --anc-bg:rgba(37,99,235,.055);
+  --sel-bg:#dbe7fd;
+  --sel-line:rgba(37,99,235,.42);
+  --match:#fff3c4;
+  --match-cur:#ffd84d;
+  --err:#c0392b;
+  --ok:#0a7d4f;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 2px 8px rgba(16,24,40,.06);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+}
+html[data-theme="dark"]{
+  --bg:#0f1216;
+  --panel:#161a20;
+  --panel-2:#1b2028;
+  --border:#262d36;
+  --border-soft:#20262e;
+  --text:#e6edf3;
+  --text-dim:#8b97a6;
+  --text-faint:#5f6b7a;
+  --accent:#5aa2f0;
+  --accent-soft:#1b2a3d;
+  --key:#79b8ff;
+  --str:#7ee787;
+  --num:#f0a35e;
+  --boo:#c297ff;
+  --nul:#7d8590;
+  --row-hover:#1d242d;
+  --row-line:rgba(255,255,255,.075);
+  --anc-bg:rgba(90,162,240,.07);
+  --sel-bg:rgba(90,162,240,.17);
+  --sel-line:rgba(90,162,240,.40);
+  --match:#3d3200;
+  --match-cur:#6b5300;
+  --err:#f2777a;
+  --ok:#6cc48c;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  font-size:13px;color:var(--text);background:var(--bg);overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+  height:100vh;display:flex;flex-direction:column;
+}
+button{font-family:inherit;font-size:12px;}
+
+/* ---------- 工具栏 ---------- */
+.toolbar{
+  height:46px;flex:0 0 46px;display:flex;align-items:center;gap:10px;
+  padding:0 12px;background:var(--panel);border-bottom:1px solid var(--border);
+  box-shadow:0 1px 0 rgba(16,24,40,.02);
+}
+.brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:.2px;white-space:nowrap;}
+.brand .logo{
+  font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent);
+  background:var(--accent-soft);border-radius:6px;padding:3px 7px;line-height:1;
+}
+.brand .sub{color:var(--text-faint);font-weight:400;font-size:11px;}
+.brand .by{
+  display:inline-flex;align-items:center;gap:7px;margin-left:-1px;
+  font-size:10px;font-weight:400;letter-spacing:.4px;line-height:1;
+  color:var(--text-faint);opacity:.85;
+  user-select:none;transition:color .15s,opacity .15s;
+}
+.brand .by::before{content:"";width:1px;height:9px;background:var(--border);}
+.brand:hover .by{opacity:1;color:var(--text-dim);}
+.spacer{flex:1;}
+.actions{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;}
+.btn{
+  height:28px;padding:0 10px;border:1px solid var(--border);background:var(--panel);
+  color:var(--text-dim);border-radius:6px;cursor:pointer;white-space:nowrap;
+  flex:0 0 auto;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.btn:hover{background:var(--panel-2);border-color:#cfd6de;color:var(--text);}
+html[data-theme="dark"] .btn:hover{border-color:#39424e;}
+.btn:active{transform:translateY(1px);}
+.btn.sm{height:25px;padding:0 8px;font-size:11px;}
+.btn.icon{width:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.btn.primary:hover{filter:brightness(1.06);color:#fff;}
+.sep{width:1px;height:18px;background:var(--border);margin:0 4px;}
+
+/* ---------- 布局 ---------- */
+.split{flex:1;display:flex;min-height:0;}
+.pane{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);}
+.input-pane{width:38%;flex:0 0 38%;}
+.gutter{flex:0 0 7px;cursor:col-resize;position:relative;background:var(--bg);}
+.gutter::after{content:"";position:absolute;left:3px;top:0;bottom:0;width:1px;background:var(--border);}
+.gutter:hover::after,.gutter.drag::after{background:var(--accent);width:2px;left:2px;}
+.output-pane{flex:1;border-left:0;}
+
+.pane-head{
+  height:34px;flex:0 0 34px;display:flex;align-items:center;gap:8px;
+  padding:0 10px;border-bottom:1px solid var(--border-soft);background:var(--panel-2);
+  overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
+}
+.pane-head::-webkit-scrollbar{height:0;}
+.pane-head .label{font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.4px;text-transform:uppercase;}
+.hint{margin-left:auto;font-size:11px;color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.grow{flex:1;}
+
+/* ---------- 输入 ---------- */
+#input{
+  flex:1;width:100%;border:0;outline:0;resize:none;padding:12px 14px;
+  font-family:var(--mono);font-size:12.5px;line-height:1.55;
+  color:var(--text);background:var(--panel);tab-size:2;
+}
+#input::placeholder{color:var(--text-faint);}
+.statusbar{
+  height:26px;flex:0 0 26px;display:flex;align-items:center;gap:8px;
+  padding:0 10px;border-top:1px solid var(--border-soft);background:var(--panel-2);
+  font-size:11px;color:var(--text-faint);font-family:var(--mono);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.statusbar .msg{overflow:hidden;text-overflow:ellipsis;}
+.statusbar .msg.err{color:var(--err);}
+.statusbar .msg.ok{color:var(--ok);}
+.statusbar .right{margin-left:auto;color:var(--text-faint);}
+
+/* ---------- 标签 / 搜索 ---------- */
+.tabs{display:flex;gap:2px;background:var(--bg);border-radius:6px;padding:2px;flex:0 0 auto;}
+.tab{
+  border:0;background:transparent;color:var(--text-dim);border-radius:4px;
+  height:22px;padding:0 10px;cursor:pointer;font-size:12px;
+  white-space:nowrap;flex:0 0 auto;
+}
+.tab.on{background:var(--panel);color:var(--text);box-shadow:var(--shadow);font-weight:500;}
+.searchbar{
+  height:34px;flex:0 0 34px;display:flex;align-items:center;gap:6px;
+  padding:0 10px;border-bottom:1px solid var(--border-soft);background:var(--panel);
+}
+
+/* 折叠到第 N 层 */
+.depthgroup{display:flex;align-items:center;gap:3px;flex:0 0 auto;}
+.depthlabel{color:var(--text-faint);font-size:10px;margin-right:1px;}
+.dbtn{
+  height:22px;padding:0 7px;border:1px solid var(--border);background:var(--panel);
+  color:var(--text-dim);border-radius:4px;cursor:pointer;line-height:1;
+  font-size:11px;font-family:var(--mono);white-space:nowrap;
+}
+.dbtn:hover{border-color:var(--accent);color:var(--accent);}
+.dbtn.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+/* 面包屑（与搜索框同一行） */
+.crumbbar{
+  flex:1 1 auto;min-width:0;height:100%;display:flex;align-items:center;gap:2px;
+  font-family:var(--mono);font-size:11px;overflow:hidden;
+}
+.crumb{display:flex;align-items:center;gap:1px;flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;}
+.crumb.ovf{
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 18px);
+  mask-image:linear-gradient(90deg,transparent 0,#000 18px);
+}
+.crumb::-webkit-scrollbar{height:0;}
+.citem{
+  border:0;background:transparent;padding:1px 5px;border-radius:4px;
+  color:var(--text-dim);cursor:pointer;font-family:var(--mono);font-size:11px;
+  max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  flex:0 0 auto;line-height:16px;
+}
+.citem:hover{background:var(--accent-soft);color:var(--accent);}
+.citem.last{color:var(--accent);background:var(--accent-soft);font-weight:600;}
+.citem.root{color:var(--text-dim);}
+.csep{color:var(--text-faint);font-size:9px;flex:0 0 auto;}
+.crumbhint{color:var(--text-faint);font-size:10px;font-family:inherit;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.crumbbar .vsep{width:1px;height:14px;background:var(--border);flex:0 0 auto;margin-left:auto;}
+#search{
+  flex:0 1 280px;height:24px;border:1px solid var(--border);border-radius:6px;
+  padding:0 8px;font-size:12px;font-family:inherit;outline:0;
+  background:var(--panel-2);color:var(--text);min-width:88px;
+}
+#search:focus{border-color:var(--accent);background:var(--panel);}
+#matchInfo{font-size:11px;color:var(--text-faint);font-family:var(--mono);white-space:nowrap;min-width:44px;text-align:right;}
+
+/* ---------- 树 ---------- */
+.tree{
+  flex:1;overflow:auto;padding:8px 0 40px;
+  font-family:var(--mono);font-size:12.5px;line-height:1.65;
+  scrollbar-gutter:stable;
+}
+.tree::-webkit-scrollbar,#input::-webkit-scrollbar,#raw::-webkit-scrollbar,.typescroll::-webkit-scrollbar{width:11px;height:11px;}
+.tree::-webkit-scrollbar-thumb,#input::-webkit-scrollbar-thumb,#raw::-webkit-scrollbar-thumb,.typescroll::-webkit-scrollbar-thumb{
+  background:#c9d1da;border-radius:6px;border:3px solid transparent;background-clip:content-box;
+}
+html[data-theme="dark"] .tree::-webkit-scrollbar-thumb,
+html[data-theme="dark"] #input::-webkit-scrollbar-thumb,
+html[data-theme="dark"] #raw::-webkit-scrollbar-thumb,
+html[data-theme="dark"] .typescroll::-webkit-scrollbar-thumb{background:#39424e;background-clip:content-box;}
+
+.row{
+  position:relative;display:flex;align-items:baseline;gap:0;
+  white-space:pre;padding:1px 16px 1px 0;border-radius:3px;
+  cursor:default;width:max-content;
+  /* 层级竖导线：宽度由每行的 --gd 决定（depth*18），不越过本行内容 */
+  background-image:repeating-linear-gradient(to right,
+    transparent 0 10px, var(--row-line) 10px 11px, transparent 11px 18px);
+  background-size:var(--gd,0px) 100%;
+  background-repeat:no-repeat;
+  background-position:0 0;
+}
+.row:hover{background-color:var(--row-hover);}
+.row.anc{background-color:var(--anc-bg);}
+.row.cont{cursor:pointer;}
+.row.sel{
+  background-color:var(--sel-bg);
+  box-shadow:inset 2px 0 0 var(--accent),
+             inset 0 1px 0 var(--sel-line),
+             inset 0 -1px 0 var(--sel-line);
+}
+.row.hit{background-color:var(--match);}
+.row.hit.cur{background-color:var(--match-cur);box-shadow:inset 2px 0 0 var(--accent);}
+
+.arrow{
+  display:inline-block;width:14px;flex:0 0 14px;text-align:center;
+  color:var(--text-faint);font-size:9px;line-height:1;transition:transform .12s;
+  transform:translateY(-1px);
+}
+.row.open > .arrow{transform:rotate(90deg) translateX(1px);}
+.arrow.empty{visibility:hidden;}
+
+.k{color:var(--key);}
+.k.idx{color:var(--text-faint);}
+.k.root{color:var(--accent);font-weight:600;}
+.c{color:var(--text-faint);margin-right:4px;}
+.v.str{color:var(--str);max-width:74ch;overflow:hidden;text-overflow:ellipsis;}
+.v.str.full{max-width:none;}
+.v.num{color:var(--num);}
+.v.boo{color:var(--boo);}
+.v.nul{color:var(--nul);font-style:italic;}
+.v.obj,.v.arr{color:var(--text-dim);}
+.v.trunc{cursor:pointer;}
+.v.trunc:hover{text-decoration:underline dotted;}
+.row .v.str:hover,.row .v.num:hover,.row .v.boo:hover,.row .v.nul:hover{text-decoration:underline dotted;text-underline-offset:3px;}
+.preview{color:var(--text-faint);margin-left:8px;font-size:11.5px;opacity:.9;}
+
+/* 跟随行的浮动操作条 */
+.floatbar{
+  position:fixed;z-index:60;display:flex;gap:3px;align-items:center;
+  background:var(--panel);border:1px solid var(--border);border-radius:7px;
+  padding:3px;box-shadow:0 4px 14px rgba(16,24,40,.13);
+  opacity:0;transform:translateX(-4px);transition:opacity .12s,transform .12s;
+  pointer-events:none;
+}
+.floatbar.show{opacity:1;transform:translateX(0);pointer-events:auto;}
+.floatbar button{
+  height:22px;padding:0 7px;border:0;background:transparent;color:var(--text-dim);
+  border-radius:4px;cursor:pointer;font-size:11px;display:inline-flex;
+  align-items:center;gap:4px;font-family:var(--mono);white-space:nowrap;
+}
+.floatbar button:hover{background:var(--accent);color:#fff;}
+.floatbar button svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
+
+.kids{display:block;}
+.kids.hidden{display:none;}
+
+.placeholder{padding:28px 20px;color:var(--text-faint);font-family:-apple-system,"Microsoft YaHei",sans-serif;font-size:12.5px;line-height:1.9;}
+.placeholder b{color:var(--text-dim);font-weight:600;}
+.placeholder kbd{
+  font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--border);
+  border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text-dim);
+}
+.toolarge{padding:10px 16px;color:var(--num);font-family:-apple-system,"Microsoft YaHei",sans-serif;font-size:12px;}
+
+/* ---------- 表格视图 ---------- */
+.tablewrap{flex:1;display:none;flex-direction:column;min-height:0;background:var(--panel);}
+.tablewrap.show{display:flex;}
+.tablebar{
+  height:32px;flex:0 0 32px;display:flex;align-items:center;gap:8px;
+  padding:0 10px;border-bottom:1px solid var(--border-soft);background:var(--panel-2);
+  font-size:11px;color:var(--text-dim);font-family:var(--mono);
+  white-space:nowrap;overflow:hidden;
+}
+.tablebar .srcpath{color:var(--accent);cursor:pointer;overflow:hidden;text-overflow:ellipsis;}
+.tablebar .srcpath:hover{text-decoration:underline;}
+.tablesel{
+  height:22px;max-width:300px;padding:0 4px;flex:0 0 auto;
+  border:1px solid var(--border);border-radius:5px;
+  background:var(--panel);color:var(--accent);cursor:pointer;outline:none;
+  font-family:var(--mono);font-size:11px;
+}
+.tablesel:hover{border-color:var(--accent);}
+.tablesel:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
+.tablesel option{background:var(--panel);color:var(--text);}
+.tabcount{color:var(--text-faint);font-size:10px;}
+.rootbox{display:inline-flex;align-items:center;gap:4px;color:var(--text-faint);font-size:11px;}
+.rootbox input{
+  width:84px;height:22px;padding:0 6px;border:1px solid var(--border);border-radius:5px;
+  background:var(--panel);color:var(--text);font-family:var(--mono);font-size:11px;outline:none;
+}
+.rootbox input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
+.tablebar .tiphint{color:var(--text-faint);}
+.tablescroll{flex:1;overflow:auto;}
+.grid{
+  border-collapse:separate;border-spacing:0;font-family:var(--mono);
+  font-size:12px;width:max-content;min-width:100%;
+}
+.grid thead th{
+  position:sticky;top:0;z-index:3;background:var(--panel-2);
+  text-align:left;font-weight:600;color:var(--text-dim);padding:0;
+  border-bottom:1px solid var(--border);border-right:1px solid var(--border-soft);
+  white-space:nowrap;cursor:pointer;user-select:none;height:30px;
+}
+.grid thead th .th{display:flex;align-items:center;gap:5px;padding:0 10px;height:30px;}
+.grid thead th:hover{background:var(--accent-soft);color:var(--accent);}
+.grid thead th .sort{font-size:9px;color:var(--accent);letter-spacing:-1px;}
+.grid thead th.rownum{z-index:4;cursor:default;}
+.grid thead th.rownum:hover{background:var(--panel-2);color:var(--text-dim);}
+.grid .rownum{
+  position:sticky;left:0;z-index:2;background:var(--panel-2);color:var(--text-faint);
+  text-align:right;padding:0 9px;font-size:11px;
+  border-right:1px solid var(--border);border-bottom:1px solid var(--border-soft);
+  min-width:44px;
+}
+.grid tbody td{
+  border-bottom:1px solid var(--border-soft);border-right:1px solid var(--border-soft);
+  padding:0 10px;height:26px;white-space:nowrap;max-width:340px;
+  overflow:hidden;text-overflow:ellipsis;color:var(--text);cursor:default;
+}
+.grid tbody tr:hover td{background:var(--row-hover);}
+.grid tbody tr:hover .rownum{background:var(--panel-2);}
+.grid td.t-num{text-align:right;color:var(--num);}
+.grid td.t-str{color:var(--str);}
+.grid td.t-boo{color:var(--boo);}
+.grid td.t-nul{color:var(--nul);font-style:italic;}
+.grid td.t-obj{color:var(--text-dim);}
+.grid td .cw{
+  display:block;max-width:240px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.grid td.norow{
+  text-align:center;color:var(--text-faint);padding:26px 0;
+  font-family:-apple-system,"Microsoft YaHei",sans-serif;font-size:12px;
+}
+.grid tbody td.miss{color:var(--text-faint);}
+td.flash{animation:cellflash .5s ease-out;}
+@keyframes cellflash{from{background:var(--accent-soft);}to{background:transparent;}}
+.tableempty{
+  padding:40px 22px;color:var(--text-faint);line-height:1.9;
+  font-family:-apple-system,"Microsoft YaHei",sans-serif;font-size:12.5px;
+}
+.tableempty b{color:var(--text-dim);}
+
+/* ---------- 类型视图 ---------- */
+.typewrap{flex:1;display:none;flex-direction:column;min-height:0;background:var(--panel);}
+.typewrap.show{display:flex;}
+.typescroll{flex:1;overflow:auto;padding:12px 0 28px;}
+.codepane{
+  margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.75;
+  white-space:pre;padding:0 16px;color:var(--text);
+}
+.codepane .tk-kw{color:#a626a4;}
+.codepane .tk-nm{color:#267f99;}
+.codepane .tk-str{color:#4a8f3c;}
+.codepane .tk-num{color:#986801;}
+.codepane .tk-cm{color:var(--text-faint);font-style:italic;}
+html[data-theme="dark"] .codepane .tk-kw{color:#c678dd;}
+html[data-theme="dark"] .codepane .tk-nm{color:#e5c07b;}
+html[data-theme="dark"] .codepane .tk-str{color:#98c379;}
+html[data-theme="dark"] .codepane .tk-num{color:#d19a66;}
+
+/* ---------- 原文 ---------- */
+#raw{
+  flex:1;margin:0;overflow:auto;padding:12px 16px;display:none;
+  font-family:var(--mono);font-size:12.5px;line-height:1.6;white-space:pre;
+  color:var(--text);background:var(--panel);
+}
+#raw.show{display:block;}
+
+/* ---------- Toast ---------- */
+.toast{
+  position:fixed;left:50%;bottom:28px;transform:translate(-50%,12px);
+  background:#1f2933;color:#fff;font-size:12px;padding:7px 14px;border-radius:8px;
+  box-shadow:0 6px 20px rgba(16,24,40,.28);opacity:0;pointer-events:none;
+  transition:opacity .16s,transform .16s;z-index:99;max-width:80vw;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+html[data-theme="dark"] .toast{background:#2c3541;}
+.toast.show{opacity:1;transform:translate(-50%,0);}
+.dragover{outline:2px dashed var(--accent);outline-offset:-8px;}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <div class="brand">
+    <span class="logo">{ }</span>
+    <span>JSON Viewer</span>
+    <span class="sub">本地 · 离线</span>
+    <span class="by">Teddy 出品</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="actions">
+    <button class="btn" id="btnSample">示例</button>
+    <button class="btn" id="btnClear">清空</button>
+    <button class="btn" id="btnImport">导入文件</button>
+    <span class="sep"></span>
+    <button class="btn" id="btnFormat">格式化</button>
+    <button class="btn" id="btnMinify">压缩</button>
+    <span class="sep"></span>
+    <button class="btn" id="btnCopyAll">复制全部</button>
+    <button class="btn" id="btnDownload">下载</button>
+    <button class="btn icon" id="btnTheme" title="切换深色 / 浅色">◐</button>
+  </div>
+</div>
+
+<div class="split">
+  <section class="pane input-pane" id="inputPane">
+    <div class="pane-head">
+      <span class="label">输入</span>
+      <span class="hint">粘贴即解析 · 可拖入 .json 文件 · Ctrl+Enter 立即解析</span>
+    </div>
+    <textarea id="input" spellcheck="false" autocomplete="off" placeholder='在这里粘贴 JSON，例如 {"name":"Teddy","tags":["dev","json"]}'></textarea>
+    <div class="statusbar">
+      <span class="msg" id="status">等待输入…</span>
+      <span class="right" id="statusRight"></span>
+    </div>
+  </section>
+
+  <div class="gutter" id="gutter" title="拖动调整宽度"></div>
+
+  <section class="pane output-pane">
+    <div class="pane-head">
+      <div class="tabs">
+        <button class="tab on" data-tab="tree">树形</button>
+        <button class="tab" data-tab="table">表格</button>
+        <button class="tab" data-tab="type">类型</button>
+        <button class="tab" data-tab="raw">原文</button>
+      </div>
+      <div class="grow"></div>
+      <span class="depthgroup" id="depthGroup" title="只展开前 N 层，更深的收起；再点一次恢复默认">
+        <span class="depthlabel">折叠到</span>
+        <button class="dbtn" data-depth="1" title="只展开 1 层">1 层</button>
+        <button class="dbtn" data-depth="2" title="只展开 2 层">2 层</button>
+        <button class="dbtn" data-depth="3" title="只展开 3 层">3 层</button>
+      </span>
+      <button class="btn sm" id="btnExpand">展开全部</button>
+      <button class="btn sm" id="btnCollapse">折叠全部</button>
+    </div>
+    <div class="searchbar" id="searchbar">
+      <div class="crumbbar" id="crumbbar" title="当前选中行的路径，点任意一段可跳回">
+        <div class="crumb" id="crumb"></div>
+        <span class="crumbhint" id="crumbhint">选中任意行显示路径</span>
+        <span class="vsep"></span>
+      </div>
+      <input id="search" placeholder="搜索 key 或值…（Ctrl+F）" autocomplete="off" spellcheck="false">
+      <span id="matchInfo"></span>
+      <button class="btn sm" id="btnPrev" title="上一个匹配">↑</button>
+      <button class="btn sm" id="btnNext" title="下一个匹配">↓</button>
+    </div>
+    <div class="tree" id="tree"></div>
+    <div class="tablewrap" id="tableWrap">
+      <div class="tablebar">
+        <select class="tablesel" id="tablePicker" title="切换表格数据源"></select>
+        <span class="tabcount" id="tableCount"></span>
+        <span class="srcpath" id="tableInfo"></span>
+        <span class="grow"></span>
+        <span class="tiphint" id="tableHint"></span>
+        <button class="btn sm" id="btnCsv">导出 CSV</button>
+      </div>
+      <div class="tablescroll" id="tableScroll"></div>
+    </div>
+    <div class="typewrap" id="typeWrap">
+      <div class="tablebar">
+        <select class="tablesel" id="typeMode" title="输出格式">
+          <option value="ts">TypeScript interface</option>
+          <option value="type">TypeScript type</option>
+          <option value="zod">Zod schema</option>
+        </select>
+        <span class="tabcount" id="typeCount"></span>
+        <span class="grow"></span>
+        <label class="rootbox" title="根类型名，改成你项目里的名字">
+          <span>根名</span>
+          <input id="typeRootName" value="Root" spellcheck="false" autocomplete="off">
+        </label>
+        <span class="tiphint" id="typeHint"></span>
+        <button class="btn sm" id="btnCopyTypes">复制</button>
+        <button class="btn sm" id="btnDownTypes">下载</button>
+      </div>
+      <div class="typescroll"><pre class="codepane" id="typeCode"></pre></div>
+    </div>
+    <pre id="raw"></pre>
+  </section>
+</div>
+
+<div class="floatbar" id="floatbar">
+  <button data-copy="value" title="复制该字段的值（Enter）">
+    <svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8.5" rx="1.6"/><path d="M3.2 11V3.6a1.4 1.4 0 0 1 1.4-1.4H10"/></svg>值
+  </button>
+  <button data-copy="name" title="只复制字段名，不含值（Shift+Enter）">字段</button>
+  <button data-action="table" class="tblbtn" title="以表格查看该数组">⊞ 表格</button>
+  <button data-copy="path" title="复制该字段的 JSONPath（Ctrl+Enter）">$ 路径</button>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="fileInput" accept=".json,.txt,application/json,text/plain" hidden>
+
+<script>
+(function () {
+  "use strict";
+
+  var DEFAULT_DEPTH = 2;   // 默认展开到第几层
+  var MAX_ROWS = 40000;    // 单次渲染最大行数，防卡死
+  var TRUNC_LEN = 260;     // 字符串截断长度
+
+  var els = {
+    input: document.getElementById("input"),
+    tree: document.getElementById("tree"),
+    raw: document.getElementById("raw"),
+    search: document.getElementById("search"),
+    searchbar: document.getElementById("searchbar"),
+    matchInfo: document.getElementById("matchInfo"),
+    status: document.getElementById("status"),
+    statusRight: document.getElementById("statusRight"),
+    toast: document.getElementById("toast"),
+    floatbar: document.getElementById("floatbar"),
+    gutter: document.getElementById("gutter"),
+    inputPane: document.getElementById("inputPane"),
+    fileInput: document.getElementById("fileInput"),
+    tableWrap: document.getElementById("tableWrap"),
+    tableScroll: document.getElementById("tableScroll"),
+    tableInfo: document.getElementById("tableInfo"),
+    tableHint: document.getElementById("tableHint"),
+    tablePicker: document.getElementById("tablePicker"),
+    tableCount: document.getElementById("tableCount"),
+    typeWrap: document.getElementById("typeWrap"),
+    typeMode: document.getElementById("typeMode"),
+    typeCode: document.getElementById("typeCode"),
+    typeCount: document.getElementById("typeCount"),
+    typeHint: document.getElementById("typeHint"),
+    typeRootName: document.getElementById("typeRootName"),
+    btnCopyTypes: document.getElementById("btnCopyTypes"),
+    btnDownTypes: document.getElementById("btnDownTypes"),
+    btnCsv: document.getElementById("btnCsv"),
+    btnPrev: document.getElementById("btnPrev"),
+    btnNext: document.getElementById("btnNext"),
+    crumbar: document.getElementById("crumbbar"),
+    crumb: document.getElementById("crumb"),
+    crumbhint: document.getElementById("crumbhint"),
+    depthGroup: document.getElementById("depthGroup")
+  };
+
+  var state = {
+    value: undefined,
+    hasValue: false,
+    raw: "",
+    error: null,
+    search: "",
+    matchIds: {},      // pathId -> true，命中的行
+    expandIds: {},     // pathId -> true，搜索时必须展开的祖先
+    matchOrder: [],    // 命中行的 pathId 顺序
+    curMatch: -1,
+    userOpen: {},
+    userClose: {},
+    allOpen: false,
+    collapseAll: false,
+    openDepth: null,       // 非 null 时“只展开到第 N 层”
+    selPath: null,         // 当前选中行的路径
+    tab: "tree",
+    rows: 0,
+    rowEls: [],
+    parsedAt: 0,
+    tableArr: null,        // 当前表格数据源（对象数组）
+    tablePath: [],         // 数据源路径
+    tableList: [],         // 全树所有可表格化的数组（按行数降序）
+    tableSort: { col: -1, dir: 0 },
+    tableCols: [],
+    tableRows: [],         // 排序 + 过滤后的行
+    typeMode: "ts"         // 类型输出格式：ts / type / zod
+  };
+
+  /* ================= 工具函数 ================= */
+
+  function pathId(path) { return JSON.stringify(path); }
+
+  function fmtPath(path) {
+    var out = "$";
+    for (var i = 0; i < path.length; i++) {
+      var seg = path[i];
+      if (typeof seg === "number") out += "[" + seg + "]";
+      else if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(seg)) out += "." + seg;
+      else out += "[" + JSON.stringify(seg) + "]";
+    }
+    return out;
+  }
+
+  function isContainer(v) { return v !== null && typeof v === "object"; }
+
+  function fmtSize(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+    return (n / 1048576).toFixed(2) + " MB";
+  }
+
+  function byteLen(str) {
+    try { return new TextEncoder().encode(str).length; } catch (e) { return str.length; }
+  }
+
+  function shortScalar(v) {
+    if (v === null) return "null";
+    if (typeof v === "string") {
+      var s = v.length > 22 ? v.slice(0, 22) + "…" : v;
+      return JSON.stringify(s);
+    }
+    if (typeof v === "object") {
+      return Array.isArray(v) ? "[" + v.length + "]" : "{" + Object.keys(v).length + "}";
+    }
+    return String(v);
+  }
+
+  function summarize(v) {
+    var out = "";
+    if (Array.isArray(v)) {
+      var n = v.length;
+      if (!n) return "";
+      var head = [];
+      for (var i = 0; i < Math.min(5, n); i++) {
+        head.push(shortScalar(v[i]));
+        if (head.join(", ").length > 64) break;
+      }
+      out = head.join(", ") + (n > head.length ? ", …" : "");
+    } else {
+      var ks = Object.keys(v);
+      if (!ks.length) return "";
+      var parts = [];
+      for (var j = 0; j < Math.min(4, ks.length); j++) {
+        parts.push(ks[j] + ": " + shortScalar(v[ks[j]]));
+        if (parts.join(", ").length > 64) break;
+      }
+      out = parts.join(", ") + (ks.length > parts.length ? ", …" : "");
+    }
+    if (out.length > 50) out = out.slice(0, 50) + "…";
+    return out;
+  }
+
+  // 复制到剪贴板的文本
+  function copyPayload(v) {
+    if (v === null) return "null";
+    if (typeof v === "string") return v;
+    if (typeof v === "object") return JSON.stringify(v, null, 2);
+    return String(v);
+  }
+
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }, function () {
+          resolve(fallbackCopy(text));
+        });
+      } else {
+        resolve(fallbackCopy(text));
+      }
+    });
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-1000px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      var ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  var toastTimer = null;
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { els.toast.classList.remove("show"); }, 1300);
+  }
+
+  function setStatus(msg, kind) {
+    els.status.textContent = msg;
+    els.status.className = "msg" + (kind ? " " + kind : "");
+  }
+
+  /* ================= 解析 ================= */
+
+  function stripLoose(text) {
+    var t = text.replace(/^\uFEFF/, "");
+    t = t.replace(/\/\*[\s\S]*?\*\//g, "");
+    t = t.replace(/(^|[^:"'\\])\/\/[^\n\r]*/g, "$1");
+    t = t.replace(/,\s*([}\]])/g, "$1");
+    return t;
+  }
+
+  function tryParse(text) {
+    var raw = text.trim();
+    if (!raw) return { ok: false, empty: true };
+
+    try {
+      return { ok: true, value: JSON.parse(raw), note: "JSON" };
+    } catch (e1) {
+      var cleaned = stripLoose(raw);
+      if (cleaned !== raw) {
+        try {
+          return { ok: true, value: JSON.parse(cleaned), note: "修正式解析（已忽略注释/尾逗号）" };
+        } catch (e2) { /* continue */ }
+      }
+      var lines = raw.split(/\r?\n/);
+      var nonEmpty = lines.filter(function (l) { return l.trim(); });
+      if (nonEmpty.length > 1) {
+        var okAll = true, arr = [];
+        for (var i = 0; i < nonEmpty.length; i++) {
+          try { arr.push(JSON.parse(nonEmpty[i])); }
+          catch (e3) { okAll = false; break; }
+        }
+        if (okAll) return { ok: true, value: arr, note: "NDJSON（每行一个 JSON，已合并为数组）" };
+      }
+      return { ok: false, error: e1, text: raw };
+    }
+  }
+
+  function errorDetail(text, err) {
+    var msg = err && err.message ? err.message : String(err);
+    var m = /position\s+(\d+)/i.exec(msg);
+    if (m) {
+      var pos = parseInt(m[1], 10);
+      var before = text.slice(0, pos);
+      var line = before.split("\n").length;
+      var col = pos - before.lastIndexOf("\n");
+      return "解析失败 · 第 " + line + " 行 第 " + col + " 列 — " + msg;
+    }
+    return "解析失败 — " + msg;
+  }
+
+  function analyze(v) {
+    var count = 0, depth = 0;
+    var stack = [[v, 1]];
+    while (stack.length) {
+      var item = stack.pop();
+      var cur = item[0], d = item[1];
+      count++;
+      if (d > depth) depth = d;
+      if (cur !== null && typeof cur === "object") {
+        if (Array.isArray(cur)) {
+          for (var i = 0; i < cur.length; i++) stack.push([cur[i], d + 1]);
+        } else {
+          for (var k in cur) {
+            if (Object.prototype.hasOwnProperty.call(cur, k)) stack.push([cur[k], d + 1]);
+          }
+        }
+      }
+    }
+    return { count: count, depth: depth };
+  }
+
+  /* ================= 解析入口 ================= */
+
+  var parseTimer = null;
+
+  function parseNow() {
+    var text = els.input.value;
+    state.raw = text;
+
+    if (!text.trim()) {
+      state.hasValue = false;
+      state.value = undefined;
+      state.error = null;
+      state.search = "";
+      state.tableArr = null;
+      state.tablePath = [];
+      state.tableList = [];
+      els.search.value = "";
+      els.matchInfo.textContent = "";
+      els.statusRight.textContent = "";
+      setStatus("等待输入…", "");
+      renderAll();
+      return;
+    }
+
+    var res = tryParse(text);
+    if (!res.ok) {
+      state.error = res.error;
+      setStatus(errorDetail(res.text || text, res.error), "err");
+      els.statusRight.textContent = fmtSize(byteLen(text));
+      // 保留上一次成功结果，不清空右侧
+      return;
+    }
+
+    state.value = res.value;
+    state.hasValue = true;
+    state.error = null;
+    state.parsedAt = Date.now();
+    state.userOpen = {};
+    state.userClose = {};
+    state.allOpen = false;
+    state.collapseAll = false;
+    state.openDepth = null;
+    state.tableArr = null;
+    state.tablePath = [];
+    state.tableList = [];
+    state.tableSort = { col: -1, dir: 0 };
+
+    var stats = analyze(res.value);
+    var kind = Array.isArray(res.value) ? "数组" : (isContainer(res.value) ? "对象" : typeof res.value);
+    setStatus("已解析 · " + res.note + " · " + kind + " · " + stats.count + " 节点 · 深度 " + stats.depth, "ok");
+    els.statusRight.textContent = fmtSize(byteLen(text));
+
+    renderAll();
+    if (els.search.value) runSearch(els.search.value);
+  }
+
+  /* ================= 渲染 ================= */
+
+  function isOpenPath(path, depth) {
+    if (depth === 0) return true;
+    var id = pathId(path);
+    if (state.search) return !!state.expandIds[id];
+    if (state.userOpen[id]) return true;
+    if (state.userClose[id]) return false;
+    if (state.openDepth) return depth < state.openDepth;
+    if (state.allOpen) return true;
+    if (state.collapseAll) return false;
+    return depth <= DEFAULT_DEPTH;
+  }
+
+  function buildNode(value, key, parentPath, depth) {
+    var path = key === null ? parentPath : parentPath.concat([key]);
+    var id = pathId(path);
+    var cont = isContainer(value);
+    var isArr = Array.isArray(value);
+
+    var wrap = document.createElement("div");
+    wrap.className = "node";
+
+    var row = document.createElement("div");
+    row.className = "row" + (cont ? " cont" : "");
+    row.style.paddingLeft = (depth * 18 + 4) + "px";
+    row.style.setProperty("--gd", (depth * 18) + "px");
+    row.dataset.id = id;
+    row.__path = path;
+    row.__value = value;
+    row.__depth = depth;
+
+    // 折叠箭头
+    var arrow = document.createElement("span");
+    arrow.className = "arrow" + (cont ? "" : " empty");
+    arrow.textContent = "▶";
+    row.appendChild(arrow);
+
+    // key
+    var kEl = document.createElement("span");
+    if (key === null) {
+      kEl.className = "k root";
+      kEl.textContent = "$";
+    } else if (typeof key === "number") {
+      kEl.className = "k idx";
+      kEl.textContent = key;
+    } else {
+      kEl.className = "k";
+      kEl.textContent = key;
+    }
+    row.appendChild(kEl);
+
+    var colon = document.createElement("span");
+    colon.className = "c";
+    colon.textContent = ":";
+    row.appendChild(colon);
+
+    // value
+    var vEl = document.createElement("span");
+    vEl.className = "v";
+    if (isArr) {
+      vEl.classList.add("arr");
+      vEl.textContent = "[" + value.length + "]";
+    } else if (cont) {
+      vEl.classList.add("obj");
+      vEl.textContent = "{" + Object.keys(value).length + "}";
+    } else if (value === null) {
+      vEl.classList.add("nul");
+      vEl.textContent = "null";
+    } else if (typeof value === "string") {
+      vEl.classList.add("str");
+      var shortText = value.length > TRUNC_LEN
+        ? JSON.stringify(value.slice(0, TRUNC_LEN)) + " …(" + value.length + " 字符)"
+        : JSON.stringify(value);
+      vEl.textContent = shortText;
+      if (value.length > 40) {
+        vEl.classList.add("trunc");
+        vEl.title = "点击展开 / 收起全文";
+        vEl.__full = JSON.stringify(value.length > 20000 ? value.slice(0, 20000) + "…" : value);
+        vEl.__short = shortText;
+        vEl.__expanded = false;
+      }
+    } else if (typeof value === "number") {
+      vEl.classList.add("num");
+      vEl.textContent = String(value);
+    } else if (typeof value === "boolean") {
+      vEl.classList.add("boo");
+      vEl.textContent = String(value);
+    } else {
+      vEl.textContent = String(value);
+    }
+    row.appendChild(vEl);
+
+    var kids = null;
+    var open = false;
+
+    if (cont) {
+      open = isOpenPath(path, depth);
+      var prev = document.createElement("span");
+      prev.className = "preview";
+      prev.textContent = summarize(value);
+      if (open) prev.style.display = "none";
+      row.appendChild(prev);
+      row.__preview = prev;
+
+      kids = document.createElement("div");
+      kids.className = "kids" + (open ? "" : " hidden");
+      row.__kids = kids;
+    }
+
+    if (open) {
+      row.classList.add("open");
+      mountChildren(row, value, path, depth);
+    }
+
+    wrap.appendChild(row);
+    if (kids) wrap.appendChild(kids);
+
+    state.rowEls.push(row);
+    return wrap;
+  }
+
+  function mountChildren(row, value, path, depth) {
+    var kids = row.__kids;
+    if (!kids || row.__mounted) return;
+    row.__mounted = true;
+
+    var frag = document.createDocumentFragment();
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i++) {
+        if (state.rows >= MAX_ROWS) { addTooLarge(frag); break; }
+        state.rows++;
+        frag.appendChild(buildNode(value[i], i, path, depth + 1));
+      }
+    } else {
+      var ks = Object.keys(value);
+      for (var j = 0; j < ks.length; j++) {
+        if (state.rows >= MAX_ROWS) { addTooLarge(frag); break; }
+        state.rows++;
+        frag.appendChild(buildNode(value[ks[j]], ks[j], path, depth + 1));
+      }
+    }
+    kids.appendChild(frag);
+  }
+
+  function addTooLarge(parent) {
+    var d = document.createElement("div");
+    d.className = "toolarge";
+    d.textContent = "已达渲染上限 " + MAX_ROWS + " 行，后续内容请用搜索定位，或分段粘贴查看。";
+    parent.appendChild(d);
+  }
+
+  function renderTree() {
+    hideFloatNow();
+    els.tree.innerHTML = "";
+    clearAncestors();
+    state.rows = 0;
+    state.rowEls = [];
+    state.selPath = null;
+    renderCrumb();
+
+    if (!state.hasValue || state.value === undefined) {
+      var ph = document.createElement("div");
+      ph.className = "placeholder";
+      ph.innerHTML = [
+        "<b>粘贴 JSON 就能看结构</b><br>",
+        "· 左侧输入框支持直接粘贴，松手即解析<br>",
+        "· 鼠标移到任意一行，尾部出现按钮：值 / 字段 / 路径（数组还有「表格」）<br>",
+        "· 顶栏 <b>折叠 1/2/3 层</b> 可一键限制展开深度；选中任意行后顶部出现面包屑，点某一段即可跳回<br>",
+        "· 键盘 <kbd>↑</kbd> <kbd>↓</kbd> 选行，<kbd>Enter</kbd> 复制值，<kbd>Shift</kbd>+<kbd>Enter</kbd> 复制字段名，<kbd>Ctrl</kbd>+<kbd>Enter</kbd> 复制路径<br>",
+        "· 点一下 <b>示例</b> 先看看效果"
+      ].join("");
+      els.tree.appendChild(ph);
+      return;
+    }
+
+    state.rows++;
+    var frag = document.createDocumentFragment();
+    frag.appendChild(buildNode(state.value, null, [], 0));
+    els.tree.appendChild(frag);
+    updateRowFlags();
+  }
+
+  function renderAll() {
+    renderTree();
+    renderRaw();
+    updateRowFlags();
+    syncDepthBtns();
+    if (state.tab === "table") {
+      if (!state.tableArr) autoPickTable();
+      renderTable();
+    }
+  }
+
+  function renderRaw() {
+    if (state.tab !== "raw") return;
+    els.raw.textContent = state.hasValue ? JSON.stringify(state.value, null, 2) : "";
+  }
+
+  /* ================= 表格视图 ================= */
+
+  var MAX_TABLE_ROWS = 5000;
+
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function isPlainObj(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+
+  // 判断是否适合表格：数组，且 80% 以上元素是普通对象
+  function isObjectArray(v) {
+    if (!Array.isArray(v) || !v.length) return false;
+    var n = 0;
+    for (var i = 0; i < v.length; i++) if (isPlainObj(v[i])) n++;
+    return n >= Math.ceil(v.length * 0.8);
+  }
+
+  // 收集全树所有可表格化的数组，按行数降序（同长度按路径字典序，保证顺序稳定）
+  function collectTableSources(root) {
+    var out = [];
+    var stack = [{ v: root, p: [] }];
+    while (stack.length) {
+      var it = stack.pop();
+      var v = it.v, p = it.p;
+      if (isObjectArray(v)) out.push({ arr: v, path: p });
+      if (v !== null && typeof v === "object") {
+        if (Array.isArray(v)) {
+          for (var i = 0; i < v.length; i++) stack.push({ v: v[i], p: p.concat([i]) });
+        } else {
+          for (var k in v) {
+            if (Object.prototype.hasOwnProperty.call(v, k)) stack.push({ v: v[k], p: p.concat([k]) });
+          }
+        }
+      }
+    }
+    out.sort(function (a, b) {
+      if (b.arr.length !== a.arr.length) return b.arr.length - a.arr.length;
+      var pa = fmtPath(a.path), pb = fmtPath(b.path);
+      return pa < pb ? -1 : pa > pb ? 1 : 0;
+    });
+    return out;
+  }
+
+  // 默认选中行数最多的那份；其余留给下拉切换
+  function autoPickTable() {
+    state.tableSort = { col: -1, dir: 0 };
+    state.tableList = state.hasValue ? collectTableSources(state.value) : [];
+    var first = state.tableList[0];
+    state.tableArr = first ? first.arr : null;
+    state.tablePath = first ? first.path : [];
+  }
+
+  function enterTable(arr, path) {
+    // 首次从树里进入表格时列表还没建过，先全量收集，否则下拉里只有当前一项
+    if (!state.tableList.length && state.hasValue) {
+      state.tableList = collectTableSources(state.value);
+    }
+    // 从树里点进来的数组可能不在列表首位，确保下拉能定位到它
+    var found = false;
+    for (var i = 0; i < state.tableList.length; i++) {
+      if (state.tableList[i].arr === arr) { found = true; break; }
+    }
+    if (!found) {
+      var at = 0;
+      while (at < state.tableList.length && state.tableList[at].arr.length > arr.length) at++;
+      state.tableList.splice(at, 0, { arr: arr, path: path });
+    }
+    state.tableArr = arr;
+    state.tablePath = path;
+    state.tableSort = { col: -1, dir: 0 };
+    state.search = "";
+    els.search.value = "";
+    els.matchInfo.textContent = "";
+    switchTab("table");
+    toast("表格视图 · " + fmtPath(path) + " · " + arr.length + " 行");
+  }
+
+  // 填充「表格来源」下拉
+  function fillPicker() {
+    var sel = els.tablePicker;
+    if (!sel) return;
+    var list = state.tableList || [];
+    // 只有一张表时不显示下拉，交给右侧路径文本
+    if (list.length <= 1) {
+      sel.style.display = "none";
+      if (els.tableCount) els.tableCount.textContent = "";
+      return;
+    }
+    sel.style.display = "";
+
+    var parts = [];
+    for (var i = 0; i < list.length; i++) parts.push(fmtPath(list[i].path) + ":" + list[i].arr.length);
+    var sig = parts.join("|");
+    if (sel.__sig !== sig) {
+      var html = "";
+      for (var j = 0; j < list.length; j++) {
+        var p = list[j].path.length ? fmtPath(list[j].path) : "(根数组)";
+        if (p.length > 42) p = "…" + p.slice(p.length - 41);
+        html += '<option value="' + j + '">' + escHtml(p) + " · " + list[j].arr.length + " 行</option>";
+      }
+      sel.innerHTML = html;
+      sel.__sig = sig;
+    }
+    var idx = -1;
+    for (var k = 0; k < list.length; k++) {
+      if (list[k].arr === state.tableArr) { idx = k; break; }
+    }
+    sel.value = idx >= 0 ? String(idx) : "0";
+    var curPath = idx >= 0 ? fmtPath(list[idx].path) : "";
+    sel.title = "当前：" + curPath + (list.length > 1 ? "\n共 " + list.length + " 个可表格化的数组，点此切换" : "");
+    if (els.tableCount) els.tableCount.textContent = list.length > 1 ? "共 " + list.length + " 个表" : "";
+  }
+
+  function collectColumns(arr) {
+    var cols = [], seen = {};
+    var scan = Math.min(arr.length, 200);
+    for (var i = 0; i < scan; i++) {
+      var o = arr[i];
+      if (!isPlainObj(o)) continue;
+      for (var k in o) {
+        if (!Object.prototype.hasOwnProperty.call(o, k)) continue;
+        if (!seen[k]) { seen[k] = 1; cols.push(k); }
+      }
+    }
+    return cols;
+  }
+
+  function tableCell(v) {
+    if (v === undefined) return { text: "—", cls: "miss" };
+    if (v === null) return { text: "null", cls: "t-nul" };
+    if (typeof v === "string") return { text: v, cls: "t-str" };
+    if (typeof v === "number") return { text: String(v), cls: "t-num" };
+    if (typeof v === "boolean") return { text: String(v), cls: "t-boo" };
+    if (Array.isArray(v)) return { text: "[" + v.length + "] " + summarize(v), cls: "t-obj" };
+    return { text: "{" + Object.keys(v).length + "} " + summarize(v), cls: "t-obj" };
+  }
+
+  function renderTable() {
+    var arr = state.tableArr;
+    var host = els.tableScroll;
+    host.innerHTML = "";
+    els.tableInfo.textContent = "";
+    els.tableHint.textContent = "";
+    fillPicker();
+
+    if (!arr || !arr.length) {
+      var ph = document.createElement("div");
+      ph.className = "tableempty";
+      ph.innerHTML = state.hasValue
+        ? "<b>这份数据里没有适合表格化的数组</b><br>需要的结构是「元素为对象的数组」，例如 claims、riders、installments。<br>在树形视图里把鼠标移到这类数组所在的行，点浮动条上的「⊞ 表格」。"
+        : "<b>还没有数据</b><br>在左侧粘贴 JSON，或用工具栏「导入文件」。";
+      host.appendChild(ph);
+      return;
+    }
+
+    var cols = collectColumns(arr);
+    state.tableCols = cols;
+
+    var q = state.search.toLowerCase();
+    var rows = [];
+    for (var i = 0; i < arr.length; i++) {
+      if (q) {
+        var hit = false;
+        for (var c = 0; c < cols.length; c++) {
+          var cv = arr[i] ? arr[i][cols[c]] : undefined;
+          if (cv === undefined || cv === null) continue;
+          var s0 = typeof cv === "object" ? JSON.stringify(cv) : String(cv);
+          if (s0.toLowerCase().indexOf(q) !== -1) { hit = true; break; }
+        }
+        if (!hit) continue;
+      }
+      rows.push(arr[i]);
+    }
+
+    var so = state.tableSort;
+    if (so.col >= 0 && so.dir) {
+      var key = cols[so.col];
+      rows.sort(function (a, b) {
+        var x = a ? a[key] : undefined, y = b ? b[key] : undefined;
+        if (x === undefined || x === null) return 1;
+        if (y === undefined || y === null) return -1;
+        if (typeof x === "number" && typeof y === "number") return (x - y) * so.dir;
+        return String(x).localeCompare(String(y), "zh-CN") * so.dir;
+      });
+    }
+    state.tableRows = rows;
+
+    var html = ['<table class="grid"><thead><tr><th class="rownum">#</th>'];
+    for (var ci = 0; ci < cols.length; ci++) {
+      var mark = (so.col === ci && so.dir) ? (so.dir > 0 ? "▲" : "▼") : "";
+      html.push('<th data-col="' + ci + '"><span class="th">' + escHtml(cols[ci]) +
+        '<span class="sort">' + mark + "</span></span></th>");
+    }
+    html.push("</tr></thead><tbody>");
+
+    if (!rows.length) {
+      html.push('<tr><td class="norow" colspan="' + (cols.length + 1) + '">没有匹配的行，清空搜索框可看全部 ' + arr.length + " 行</td></tr>");
+    }
+
+    var limit = Math.min(rows.length, MAX_TABLE_ROWS);
+    for (var r = 0; r < limit; r++) {
+      var item = rows[r];
+      html.push('<tr><td class="rownum" data-r="' + r + '" title="点击复制整行 JSON">' + (r + 1) + "</td>");
+      for (var c2 = 0; c2 < cols.length; c2++) {
+        var cell = tableCell(item ? item[cols[c2]] : undefined);
+        html.push('<td class="' + cell.cls + '" data-r="' + r + '" data-c="' + c2 +
+          '" title="' + escHtml(cell.text) + '"><span class="cw">' + escHtml(cell.text) + "</span></td>");
+      }
+      html.push("</tr>");
+    }
+    html.push("</tbody></table>");
+    host.innerHTML = html.join("");
+
+    // 多表时下拉已经显示路径，这里不再重复，只报尺寸
+    var multi = (state.tableList || []).length > 1;
+    var srcLabel = multi ? "" : fmtPath(state.tablePath) + " · ";
+    els.tableInfo.textContent = srcLabel + rows.length + " 行 × " + cols.length + " 列" +
+      (q ? "（已过滤）" : "");
+    els.tableInfo.title = "点击回到树形视图";
+    els.tableHint.textContent = rows.length > MAX_TABLE_ROWS
+      ? "仅渲染前 " + MAX_TABLE_ROWS + " 行，导出 CSV 可拿全量"
+      : "点单元格复制 · 点表头排序";
+
+    // 横向溢出时给个提示
+    if (host.scrollWidth > host.clientWidth + 4) {
+      els.tableHint.textContent = "↔ 可横向滚动 · 点单元格复制 · 点行号复制整行";
+    }
+  }
+
+  function sortByCol(ci) {
+    var s = state.tableSort;
+    if (s.col !== ci) { s.col = ci; s.dir = 1; }
+    else if (s.dir === 1) { s.dir = -1; }
+    else if (s.dir === -1) { s.dir = 0; s.col = -1; }
+    else { s.dir = 1; }
+    renderTable();
+  }
+
+  function csvCellText(v) {
+    if (v === undefined || v === null) return "";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  }
+
+  function csvEscape(s) {
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function exportCsv() {
+    var cols = state.tableCols, rows = state.tableRows;
+    if (!cols.length || !rows.length) { toast("没有可导出的数据"); return; }
+    var lines = [cols.map(csvEscape).join(",")];
+    for (var i = 0; i < rows.length; i++) {
+      var line = [];
+      for (var j = 0; j < cols.length; j++) line.push(csvEscape(csvCellText(rows[i][cols[j]])));
+      lines.push(line.join(","));
+    }
+    var csv = "\uFEFF" + lines.join("\r\n");
+    var name = "table.csv";
+    for (var k = state.tablePath.length - 1; k >= 0; k--) {
+      if (typeof state.tablePath[k] === "string") { name = state.tablePath[k] + ".csv"; break; }
+    }
+    downloadText(csv, name, "text/csv;charset=utf-8");
+    toast("已导出 " + name + " · " + rows.length + " 行 × " + cols.length + " 列");
+  }
+
+  function downloadText(text, filename, mime) {
+    var blob = new Blob([text], { type: mime || "text/plain;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /* ================= 类型生成 ================= */
+
+  var TYPE_SCAN = 500;  // 每个数组最多采样多少个元素来合并字段
+
+  function typeTag(v) {
+    if (v === null) return "null";
+    if (Array.isArray(v)) return "array";
+    return typeof v;
+  }
+
+  function pascalCase(s) {
+    var parts = String(s).replace(/[^A-Za-z0-9]+/g, " ").trim().split(/\s+/);
+    var out = "";
+    for (var i = 0; i < parts.length; i++) {
+      if (!parts[i]) continue;
+      out += parts[i].charAt(0).toUpperCase() + parts[i].slice(1);
+    }
+    if (!out) out = "Type";
+    if (/^[0-9]/.test(out)) out = "T" + out;
+    return out;
+  }
+
+  // 保守单数化，只在数组元素命名时使用
+  function singularize(s) {
+    var w = String(s);
+    if (!w) return "Item";
+    if (/(ss|us|is|news|data|info|series|species|media)$/i.test(w)) return w;
+    if (/ies$/i.test(w) && w.length > 4) return w.slice(0, -3) + "y";
+    if (/(ses|xes|zes|ches|shes|oes)$/i.test(w)) return w.slice(0, -2);
+    if (/[^s]s$/i.test(w) && w.length > 3) return w.slice(0, -1);
+    return w;
+  }
+
+  function tsKey(k) {
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : JSON.stringify(k);
+  }
+
+  // 键全是日期 / 数字 / UUID 时视作字典
+  function isDictKey(keys) {
+    var dt = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?/;
+    var uid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (!(/^\d+$/.test(k) || dt.test(k) || uid.test(k))) return false;
+    }
+    return true;
+  }
+
+  function TypeCtx() {
+    this.decls = [];    // 先子后父的声明列表
+    this.bySig = {};    // 结构签名 -> 已分配的类型名（复用同结构）
+    this.used = {};     // 类型名 -> 结构签名
+    this.fields = 0;
+  }
+
+  function sigOf(node) {
+    if (node.k === "prim") return node.t;
+    if (node.k === "null") return "null";
+    if (node.k === "obj") return node.name;
+    if (node.k === "arr") return "[" + sigOf(node.of) + "]";
+    if (node.k === "rec") return "Rec<" + sigOf(node.of) + ">";
+    if (node.k === "union") return node.of.map(sigOf).join("|");
+    return "?";
+  }
+
+  function inferType(samples, hint, ctx) {
+    var tags = [], seen = {};
+    for (var i = 0; i < samples.length; i++) {
+      var t = typeTag(samples[i]);
+      if (!seen[t]) { seen[t] = 1; tags.push(t); }
+    }
+    if (!tags.length) return { k: "prim", t: "unknown" };
+
+    if (tags.length > 1) {
+      var parts = [];
+      for (var j = 0; j < tags.length; j++) {
+        var sub = [];
+        for (var k = 0; k < samples.length; k++) {
+          if (typeTag(samples[k]) === tags[j]) sub.push(samples[k]);
+        }
+        parts.push(inferType(sub, hint, ctx));
+      }
+      return { k: "union", of: parts };
+    }
+
+    var tag = tags[0];
+    if (tag === "null") return { k: "null" };
+    if (tag === "string" || tag === "number" || tag === "boolean") return { k: "prim", t: tag };
+    if (tag === "array") return inferArray(samples, hint, ctx);
+    return inferObject(samples, hint, ctx);
+  }
+
+  function inferArray(samples, hint, ctx) {
+    var items = [];
+    for (var i = 0; i < samples.length && items.length < TYPE_SCAN; i++) {
+      var a = samples[i];
+      for (var j = 0; j < a.length && items.length < TYPE_SCAN; j++) items.push(a[j]);
+    }
+    if (!items.length) return { k: "arr", of: { k: "prim", t: "unknown" } };
+    return { k: "arr", of: inferType(items, singularize(hint || "item"), ctx) };
+  }
+
+  function inferObject(objs, hint, ctx) {
+    if (objs.length === 1) {
+      var ks = Object.keys(objs[0]);
+      if (ks.length >= 2 && isDictKey(ks)) {
+        var vals = [];
+        for (var d = 0; d < ks.length; d++) vals.push(objs[0][ks[d]]);
+        return { k: "rec", of: inferType(vals, "value", ctx) };
+      }
+    }
+
+    var order = [], seen = {}, buckets = {}, total = objs.length;
+    for (var b = 0; b < objs.length; b++) {
+      var o = objs[b];
+      for (var key in o) {
+        if (!Object.prototype.hasOwnProperty.call(o, key)) continue;
+        if (!seen[key]) { seen[key] = 1; order.push(key); buckets[key] = []; }
+        buckets[key].push(o[key]);
+      }
+    }
+
+    var props = [], sigParts = [];
+    for (var p = 0; p < order.length; p++) {
+      var kk = order[p];
+      var node = inferType(buckets[kk], kk, ctx);
+      var opt = buckets[kk].length < total;
+      props.push({ key: kk, opt: opt, node: node });
+      sigParts.push(kk + (opt ? "?" : "") + ":" + sigOf(node));
+    }
+    var sig = sigParts.join(";");
+
+    if (ctx.bySig[sig]) return { k: "obj", name: ctx.bySig[sig], props: props };
+
+    var base = pascalCase(hint || "Root");
+    var name = base, n = 2;
+    while (ctx.used[name] && ctx.used[name] !== sig) { name = base + n; n++; }
+    ctx.used[name] = sig;
+    ctx.bySig[sig] = name;
+    ctx.fields += props.length;
+    ctx.decls.push({ name: name, props: props });
+    return { k: "obj", name: name, props: props };
+  }
+
+  /* ---------- 渲染 TS ---------- */
+
+  function renderTs(node) {
+    if (node.k === "prim") return node.t;
+    if (node.k === "null") return "null";
+    if (node.k === "obj") return node.name;
+    if (node.k === "rec") return "Record<string, " + renderTs(node.of) + ">";
+    if (node.k === "arr") {
+      var inner = renderTs(node.of);
+      return inner.indexOf(" | ") >= 0 ? "(" + inner + ")[]" : inner + "[]";
+    }
+    if (node.k === "union") {
+      var parts = node.of.map(renderTs);
+      var nulls = parts.filter(function (x) { return x === "null"; });
+      var rest = parts.filter(function (x) { return x !== "null"; });
+      return rest.concat(nulls).join(" | ");
+    }
+    return "unknown";
+  }
+
+  function genTs(value, asType, rootName) {
+    var ctx = new TypeCtx();
+    // 根是数组时元素不能与根别名重名
+    var rootHint = Array.isArray(value) ? (rootName === "Item" ? "Item2" : "Item") : rootName;
+    var root = inferType([value], rootHint, ctx);
+    var out = [];
+    for (var i = 0; i < ctx.decls.length; i++) {
+      var d = ctx.decls[i];
+      var body = d.props.map(function (p) {
+        return "  " + tsKey(p.key) + (p.opt ? "?" : "") + ": " + renderTs(p.node) + ";";
+      }).join("\n");
+      out.push(asType
+        ? "export type " + d.name + " = {\n" + body + "\n};"
+        : "export interface " + d.name + " {\n" + body + "\n}");
+    }
+    if (root.k !== "obj") out.push("export type " + rootName + " = " + renderTs(root) + ";");
+    return { code: out.join("\n\n") + "\n", count: ctx.decls.length, fields: ctx.fields };
+  }
+
+  /* ---------- 渲染 Zod ---------- */
+
+  function renderZod(node) {
+    if (node.k === "prim") {
+      if (node.t === "string") return "z.string()";
+      if (node.t === "number") return "z.number()";
+      if (node.t === "boolean") return "z.boolean()";
+      return "z.unknown()";
+    }
+    if (node.k === "null") return "z.null()";
+    if (node.k === "obj") return node.name + "Schema";
+    if (node.k === "rec") return "z.record(z.string(), " + renderZod(node.of) + ")";
+    if (node.k === "arr") return "z.array(" + renderZod(node.of) + ")";
+    if (node.k === "union") {
+      var rest = node.of.filter(function (n) { return n.k !== "null"; });
+      var hasNull = rest.length !== node.of.length;
+      var base = rest.length === 1 ? renderZod(rest[0])
+        : "z.union([" + rest.map(renderZod).join(", ") + "])";
+      return hasNull ? base + ".nullable()" : base;
+    }
+    return "z.unknown()";
+  }
+
+  function genZod(value, rootName) {
+    var ctx = new TypeCtx();
+    var rootHint = Array.isArray(value) ? (rootName === "Item" ? "Item2" : "Item") : rootName;
+    var root = inferType([value], rootHint, ctx);
+    var out = ['import { z } from "zod";', ""];
+    for (var i = 0; i < ctx.decls.length; i++) {
+      var d = ctx.decls[i];
+      var body = d.props.map(function (p) {
+        return "  " + tsKey(p.key) + ": " + renderZod(p.node) + (p.opt ? ".optional()" : "") + ",";
+      }).join("\n");
+      out.push("export const " + d.name + "Schema = z.object({\n" + body + "\n});");
+      out.push("export type " + d.name + " = z.infer<typeof " + d.name + "Schema>;");
+      out.push("");
+    }
+    if (root.k !== "obj") {
+      out.push("export const " + rootName + "Schema = " + renderZod(root) + ";");
+      out.push("export type " + rootName + " = z.infer<typeof " + rootName + "Schema>;");
+      out.push("");
+    }
+    return {
+      code: out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n",
+      count: ctx.decls.length, fields: ctx.fields
+    };
+  }
+
+  /* ---------- 语法着色 ---------- */
+
+  var CODE_KW = {
+    export: 1, interface: 1, type: 1, const: 1, import: 1, from: 1, extends: 1,
+    null: 1, string: 1, number: 1, boolean: 1, unknown: 1,
+    Record: 1, infer: 1, typeof: 1, z: 1, object: 1, array: 1, record: 1, union: 1
+  };
+
+  function highlightCode(src) {
+    var out = "";
+    var re = /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*")|([A-Za-z_$][A-Za-z0-9_$]*)|(\d+(?:\.\d+)?)|(\s+)|([\s\S])/g;
+    var m;
+    while ((m = re.exec(src)) !== null) {
+      if (m[1]) out += '<span class="tk-cm">' + escHtml(m[1]) + "</span>";
+      else if (m[2]) out += '<span class="tk-str">' + escHtml(m[2]) + "</span>";
+      else if (m[3]) {
+        var w = m[3];
+        if (CODE_KW[w]) out += '<span class="tk-kw">' + w + "</span>";
+        else if (/^[A-Z]/.test(w)) out += '<span class="tk-nm">' + w + "</span>";
+        else out += w;
+      } else if (m[4]) out += '<span class="tk-num">' + m[4] + "</span>";
+      else out += escHtml(m[0]);
+    }
+    return out;
+  }
+
+  /* ---------- 视图 ---------- */
+
+  var typeState = { cacheKey: "", code: "", count: 0, fields: 0 };
+
+  function cleanRootName(v) {
+    var s = String(v || "").replace(/[^A-Za-z0-9_$]/g, "");
+    if (!s) return "Root";
+    if (/^[0-9]/.test(s)) s = "T" + s;
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  function renderTypes() {
+    var host = els.typeCode;
+    if (!state.hasValue) {
+      host.innerHTML = '<span style="color:var(--text-faint)">还没有数据。在左侧粘贴 JSON 或导入文件，这里会自动生成类型定义。</span>';
+      els.typeCount.textContent = "";
+      els.typeHint.textContent = "";
+      typeState = { cacheKey: "", code: "", count: 0, fields: 0 };
+      return;
+    }
+
+    var mode = state.typeMode || "ts";
+    var rootName = cleanRootName(els.typeRootName.value);
+    var key = mode + "|" + rootName + "|" + state.rows + "|" + state.parsedAt;
+    if (typeState.cacheKey !== key) {
+      var res = mode === "zod" ? genZod(state.value, rootName) : genTs(state.value, mode === "type", rootName);
+      typeState = { cacheKey: key, code: res.code, count: res.count, fields: res.fields };
+    }
+
+    host.innerHTML = highlightCode(typeState.code);
+    els.typeCount.textContent = typeState.count + " 个类型 · " + typeState.fields + " 个字段";
+    els.typeHint.textContent = "数组按前 " + TYPE_SCAN + " 个元素合并字段";
+  }
+
+  els.typeMode.addEventListener("change", function () {
+    state.typeMode = this.value;
+    try { localStorage.setItem("jv-typemode", this.value); } catch (e) {}
+    renderTypes();
+  });
+
+  var typeRootTimer = null;
+  els.typeRootName.addEventListener("input", function () {
+    clearTimeout(typeRootTimer);
+    typeRootTimer = setTimeout(renderTypes, 260);
+  });
+  els.typeRootName.addEventListener("blur", function () {
+    this.value = cleanRootName(this.value);
+    renderTypes();
+  });
+
+  els.btnCopyTypes.addEventListener("click", function () {
+    if (!typeState.code) { toast("没有可复制的内容"); return; }
+    copyText(typeState.code).then(function (ok) {
+      toast(ok ? "已复制 " + typeState.count + " 个类型定义" : "复制失败");
+    });
+  });
+
+  els.btnDownTypes.addEventListener("click", function () {
+    if (!typeState.code) { toast("没有可导出的内容"); return; }
+    var isZod = (state.typeMode || "ts") === "zod";
+    downloadText(typeState.code, isZod ? "schema.ts" : "types.ts", "text/typescript;charset=utf-8");
+    toast("已下载 " + (isZod ? "schema.ts" : "types.ts"));
+  });
+
+  els.tableScroll.addEventListener("click", function (e) {
+    var th = e.target.closest("th[data-col]");
+    if (th) { sortByCol(parseInt(th.dataset.col, 10)); return; }
+    var td = e.target.closest("td[data-r]");
+    if (!td) return;
+    var r = parseInt(td.dataset.r, 10);
+    var row = state.tableRows[r];
+    if (!row) return;
+
+    if (td.classList.contains("rownum")) {
+      copyText(copyPayload(row)).then(function (ok) {
+        if (!ok) { toast("复制失败"); return; }
+        toast("已复制第 " + (r + 1) + " 行 JSON（" + Object.keys(row).length + " 个字段）");
+      });
+      return;
+    }
+
+    var c = parseInt(td.dataset.c, 10);
+    var col = state.tableCols[c];
+    var val = row[col];
+    copyText(copyPayload(val === undefined ? "" : val)).then(function (ok) {
+      if (!ok) { toast("复制失败"); return; }
+      td.classList.remove("flash");
+      void td.offsetWidth;
+      td.classList.add("flash");
+      toast("已复制 " + col + " = " + shortScalar(val === undefined ? "—" : val));
+    });
+  });
+
+  els.tableInfo.addEventListener("click", function () {
+    if (state.tableArr) switchTab("tree");
+  });
+
+  els.tablePicker.addEventListener("change", function () {
+    var src = state.tableList[parseInt(this.value, 10)];
+    if (!src) return;
+    enterTable(src.arr, src.path);
+  });
+
+  els.btnCsv.addEventListener("click", exportCsv);
+
+  /* ================= 展开 / 折叠 ================= */
+
+  function toggleAt(row, forceOpen) {
+    var path = row.__path;
+    var depth = row.__depth;
+    var id = pathId(path);
+    var wantOpen = typeof forceOpen === "boolean" ? forceOpen : !row.classList.contains("open");
+    var cont = isContainer(row.__value);
+    if (!cont) return;
+
+    if (wantOpen) {
+      delete state.userClose[id];
+      state.userOpen[id] = true;
+      if (!row.__mounted) mountChildren(row, row.__value, path, depth);
+      row.classList.add("open");
+      row.__kids.classList.remove("hidden");
+      if (row.__preview) row.__preview.style.display = "none";
+    } else {
+      delete state.userOpen[id];
+      state.userClose[id] = true;
+      row.classList.remove("open");
+      row.__kids.classList.add("hidden");
+      if (row.__preview) row.__preview.style.display = "";
+      if (state.curMatch >= 0) state.curMatch = -1;
+    }
+    collectRows();
+    updateRowFlags();
+  }
+
+  function collectRows() {
+    state.rowEls = Array.prototype.slice.call(els.tree.querySelectorAll(".row"));
+  }
+
+  /* ================= 搜索 ================= */
+
+  function runSearch(q) {
+    state.search = q || "";
+    state.matchIds = {};
+    state.expandIds = {};
+    state.matchOrder = [];
+    state.curMatch = -1;
+
+    if (!state.search) {
+      els.matchInfo.textContent = "";
+      renderTree();
+      return;
+    }
+    if (!state.hasValue) { els.matchInfo.textContent = "0"; return; }
+
+    var needle = state.search.toLowerCase();
+    var stack = [{ v: state.value, p: [], key: null }];
+
+    while (stack.length) {
+      var it = stack.pop();
+      var v = it.v, p = it.p, key = it.key;
+      var hit = false;
+
+      if (key !== null) {
+        if (String(key).toLowerCase().indexOf(needle) !== -1) hit = true;
+      }
+      if (!hit && !isContainer(v)) {
+        var s = v === null ? "null" : String(v);
+        if (s.toLowerCase().indexOf(needle) !== -1) hit = true;
+      }
+
+      if (hit) {
+        var id = pathId(p);
+        state.matchIds[id] = true;
+        state.matchOrder.push(id);
+        // 祖先全部需要展开
+        for (var i = 0; i < p.length; i++) {
+          state.expandIds[pathId(p.slice(0, i))] = true;
+        }
+      }
+
+      if (isContainer(v)) {
+        if (Array.isArray(v)) {
+          for (var j = v.length - 1; j >= 0; j--) stack.push({ v: v[j], p: p.concat([j]), key: j });
+        } else {
+          var ks = Object.keys(v);
+          for (var m = ks.length - 1; m >= 0; m--) stack.push({ v: v[ks[m]], p: p.concat([ks[m]]), key: ks[m] });
+        }
+      }
+    }
+
+    renderTree();
+    var total = state.matchOrder.length;
+    els.matchInfo.textContent = total ? "0 / " + total : "无匹配";
+    if (total) jumpMatch(1);
+  }
+
+  function jumpMatch(dir) {
+    var total = state.matchOrder.length;
+    if (!total) return;
+    state.curMatch = (state.curMatch + dir + total) % total;
+    els.matchInfo.textContent = (state.curMatch + 1) + " / " + total;
+    updateRowFlags();
+    var id = state.matchOrder[state.curMatch];
+    var el = els.tree.querySelector('.row[data-id="' + cssAttr(id) + '"]');
+    if (el) {
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      selectRow(el);
+    }
+  }
+
+  function cssAttr(v) {
+    return String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  function updateRowFlags() {
+    if (!state.search) {
+      state.rowEls.forEach(function (r) { r.classList.remove("hit", "cur"); });
+      return;
+    }
+    var curId = state.curMatch >= 0 ? state.matchOrder[state.curMatch] : null;
+    state.rowEls.forEach(function (r) {
+      var id = r.dataset.id;
+      var hit = !!state.matchIds[id];
+      r.classList.toggle("hit", hit);
+      r.classList.toggle("cur", hit && id === curId);
+    });
+  }
+
+  /* ================= 复制 ================= */
+
+  var opSeq = 0;   // 防止异步复制回调覆盖后续操作的提示
+
+  function copyRow(row, what) {
+    if (!row) return;
+    var seq = ++opSeq;
+    var path = row.__path;
+
+    if (what === "path") {
+      copyText(fmtPath(path)).then(function (ok) {
+        if (seq !== opSeq) return;
+        toast(ok ? "已复制路径 " + fmtPath(path) : "复制失败");
+      });
+      return;
+    }
+
+    if (what === "name") {
+      if (!path.length) { toast("根节点没有字段名"); return; }
+      var last = path[path.length - 1];
+      var nameText = String(last);
+      copyText(nameText).then(function (ok) {
+        if (seq !== opSeq) return;
+        var shown = nameText.length > 28 ? nameText.slice(0, 28) + "…" : nameText;
+        toast(ok ? "已复制字段名 " + shown : "复制失败");
+      });
+      return;
+    }
+
+    var text = copyPayload(row.__value);
+    copyText(text).then(function (ok) {
+      if (seq !== opSeq) return;
+      if (!ok) { toast("复制失败，请手动选中"); return; }
+      var label = typeof row.__value === "string" ? "已复制字符串（" + row.__value.length + " 字符）" : "已复制 " + shortScalar(row.__value);
+      toast(label);
+    });
+  }
+
+  /* ================= 事件 ================= */
+
+  els.input.addEventListener("input", function () {
+    clearTimeout(parseTimer);
+    parseTimer = setTimeout(parseNow, 280);
+  });
+
+  els.input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      clearTimeout(parseTimer);
+      parseNow();
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      var s = this.selectionStart, en = this.selectionEnd;
+      this.value = this.value.slice(0, s) + "  " + this.value.slice(en);
+      this.selectionStart = this.selectionEnd = s + 2;
+    }
+  });
+
+  // 任意位置粘贴：焦点不在输入框时也能直接解析
+  window.addEventListener("paste", function (e) {
+    var t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    var cd = e.clipboardData || window.clipboardData;
+    if (!cd) return;
+    var text = cd.getData("text");
+    if (!text || !text.trim()) return;
+    e.preventDefault();
+    els.input.value = text;
+    parseNow();
+    toast("已粘贴并解析");
+  });
+
+  // 树的点击
+  els.tree.addEventListener("click", function (e) {
+    var trunc = e.target.closest(".v.trunc");
+    if (trunc) {
+      e.stopPropagation();
+      showFullString(trunc);
+      return;
+    }
+    var row = e.target.closest(".row");
+    if (!row) return;
+    var sel = window.getSelection();
+    if (sel && String(sel).length > 0) return;
+
+    selectRow(row);
+
+    if (row.classList.contains("cont")) {
+      toggleAt(row);
+      return;
+    }
+    // 标量行：点值即复制
+    if (e.target.closest(".v")) copyRow(row, "value");
+  });
+
+  function showFullString(el) {
+    if (el.__expanded) {
+      el.textContent = el.__short;
+      el.__expanded = false;
+      el.classList.remove("full");
+    } else {
+      el.textContent = el.__full;
+      el.__expanded = true;
+      el.classList.add("full");
+    }
+    if (fbRow) positionFloat(fbRow);
+  }
+
+  els.tree.addEventListener("dblclick", function (e) {
+    if (e.target.closest(".v.trunc")) return;
+    var row = e.target.closest(".row");
+    if (row) copyRow(row, "value");
+  });
+
+  /* ---------- 跟随行的浮动操作条 ---------- */
+
+  var fbRow = null;
+  var fbTimer = null;
+
+  function positionFloat(row) {
+    var fbEl = els.floatbar;
+    var r = row.getBoundingClientRect();
+    var treeR = els.tree.getBoundingClientRect();
+    var w = fbEl.offsetWidth || 110;
+    var h = fbEl.offsetHeight || 28;
+    var x = Math.min(r.right + 12, treeR.right - w - 14);
+    if (x < treeR.left + 8) x = treeR.left + 8;
+    var y = r.top + r.height / 2 - h / 2;
+    if (y < 4) y = 4;
+    fbEl.style.left = Math.round(x) + "px";
+    fbEl.style.top = Math.round(y) + "px";
+  }
+
+  var fbTableBtn = els.floatbar.querySelector('[data-action="table"]');
+
+  function showFloat(row) {
+    clearTimeout(fbTimer);
+    if (fbRow === row && els.floatbar.classList.contains("show")) return;
+    fbRow = row;
+    fbTableBtn.style.display = isObjectArray(row.__value) ? "" : "none";
+    els.floatbar.classList.add("show");
+    positionFloat(row);
+  }
+
+  function hideFloatSoon() {
+    clearTimeout(fbTimer);
+    fbTimer = setTimeout(hideFloatNow, 140);
+  }
+
+  function hideFloatNow() {
+    clearTimeout(fbTimer);
+    els.floatbar.classList.remove("show");
+    fbRow = null;
+  }
+
+  els.tree.addEventListener("mousemove", function (e) {
+    var row = e.target.closest(".row");
+    showAncestors(row);
+    if (row) showFloat(row);
+    else hideFloatSoon();
+  });
+  els.tree.addEventListener("mouseleave", function () {
+    clearAncestors();
+    hideFloatSoon();
+  });
+
+  els.tree.addEventListener("scroll", function () {
+    if (!fbRow || !els.floatbar.classList.contains("show")) return;
+    var r = fbRow.getBoundingClientRect();
+    var treeR = els.tree.getBoundingClientRect();
+    if (r.bottom < treeR.top || r.top > treeR.bottom) { hideFloatNow(); return; }
+    positionFloat(fbRow);
+  }, { passive: true });
+
+  els.floatbar.addEventListener("mouseenter", function () { clearTimeout(fbTimer); });
+  els.floatbar.addEventListener("mouseleave", hideFloatSoon);
+  els.floatbar.addEventListener("click", function (e) {
+    var actBtn = e.target.closest("button[data-action]");
+    if (actBtn) {
+      if (!fbRow) return;
+      if (actBtn.dataset.action === "table") {
+        var srcRow = fbRow;
+        hideFloatNow();
+        enterTable(srcRow.__value, srcRow.__path);
+      }
+      return;
+    }
+    var btn = e.target.closest("button[data-copy]");
+    if (!btn || !fbRow) return;
+    copyRow(fbRow, btn.dataset.copy);
+  });
+
+  function selectRow(row) {
+    if (!row) return;
+    state.rowEls.forEach(function (r) { r.classList.remove("sel"); });
+    row.classList.add("sel");
+    state.selPath = row.__path.slice();
+    renderCrumb();
+  }
+
+  /* ---------- 悬停祖先链：hover 任意行时点亮它的所有祖先 ---------- */
+
+  var ancRow = null;
+
+  function clearAncestors() {
+    ancRow = null;
+    var list = els.tree.querySelectorAll(".row.anc");
+    for (var i = 0; i < list.length; i++) list[i].classList.remove("anc");
+  }
+
+  function showAncestors(row) {
+    if (row === ancRow) return;
+    clearAncestors();
+    if (!row || !row.__path || !row.__path.length) return;
+    ancRow = row;
+    var p = row.__path;
+    for (var i = 0; i < p.length; i++) {
+      var el = findRowByPath(p.slice(0, i));
+      if (el) el.classList.add("anc");
+    }
+  }
+
+  /* ---------- 面包屑 ---------- */
+
+  function findRowByPath(path) {
+    var id = pathId(path);
+    for (var i = 0; i < state.rowEls.length; i++) {
+      if (state.rowEls[i].dataset.id === id) return state.rowEls[i];
+    }
+    return null;
+  }
+
+  // 逐层展开到目标路径，返回目标行（不可达返回 null）
+  function revealPath(path) {
+    var row = findRowByPath([]);
+    if (!row) return null;
+    for (var i = 0; i < path.length; i++) {
+      if (isContainer(row.__value) && !row.classList.contains("open")) toggleAt(row, true);
+      var next = findRowByPath(path.slice(0, i + 1));
+      if (!next) return null;
+      row = next;
+    }
+    return row;
+  }
+
+  function segLabel(seg) {
+    if (typeof seg === "number") return "[" + seg + "]";
+    if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(seg)) return seg;
+    return "[" + JSON.stringify(seg) + "]";
+  }
+
+  function renderCrumb() {
+    if (!els.crumb) return;
+    var host = els.crumb;
+    host.innerHTML = "";
+    var path = state.selPath;
+
+    if (!state.hasValue || !path) {
+      host.style.display = "none";
+      els.crumbhint.style.display = "";
+      els.crumbhint.textContent = state.hasValue ? "选中任意行显示路径，点任意一段可跳回" : "路径导航";
+      return;
+    }
+
+    host.style.display = "";
+    els.crumbhint.style.display = "none";
+    els.crumbar.title = fmtPath(path) + "　· 点任意一段跳转到该层";
+    var parts = [{ label: "$", path: [] }];
+    var acc = [];
+    for (var i = 0; i < path.length; i++) {
+      acc = acc.concat([path[i]]);
+      parts.push({ label: segLabel(path[i]), path: acc.slice() });
+    }
+
+    parts.forEach(function (p, idx) {
+      if (idx) {
+        var sep = document.createElement("span");
+        sep.className = "csep";
+        sep.textContent = "›";
+        host.appendChild(sep);
+      }
+      var chip = document.createElement("button");
+      chip.className = "citem" + (idx === parts.length - 1 ? " last" : (idx === 0 ? " root" : ""));
+      chip.textContent = p.label;
+      chip.dataset.i = String(idx);
+      chip.title = fmtPath(p.path) + (idx === parts.length - 1 ? "" : " · 点击跳转到这一层");
+      host.appendChild(chip);
+    });
+
+    // 末尾留白，避免最后一段贴边
+    host.scrollLeft = host.scrollWidth;
+    // 路径过长被裁到左侧时，加一层渐隐提示还能往左滚
+    host.classList.toggle("ovf", host.scrollWidth - host.clientWidth > 1);
+  }
+
+  els.crumb.addEventListener("click", function (e) {
+    var chip = e.target.closest(".citem");
+    if (!chip || chip.disabled) return;
+    var path = state.selPath;
+    if (!path) return;
+    var i = parseInt(chip.dataset.i, 10);
+    var target = i === 0 ? [] : path.slice(0, i);
+    var row = revealPath(target);
+    if (!row) { toast("该位置在当前视图里不可达，先展开上级"); return; }
+    selectRow(row);
+    row.scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+
+  // 窗口或分栏变化后重新判断路径是否被裁切
+  function refreshCrumbOverflow() {
+    var host = els.crumb;
+    if (!host || !state.selPath) return;
+    host.classList.toggle("ovf", host.scrollWidth - host.clientWidth > 1);
+  }
+  window.addEventListener("resize", refreshCrumbOverflow);
+
+  // 搜索
+  var searchTimer = null;
+  els.search.addEventListener("input", function () {
+    clearTimeout(searchTimer);
+    var q = this.value.trim();
+    searchTimer = setTimeout(function () {
+      if (state.tab === "table") { state.search = q; renderTable(); return; }
+      runSearch(q);
+    }, 180);
+  });
+
+  els.search.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      clearTimeout(searchTimer);
+      if (state.tab === "table") { state.search = this.value.trim(); renderTable(); return; }
+      if (this.value.trim() !== state.search) { runSearch(this.value.trim()); return; }
+      jumpMatch(e.shiftKey ? -1 : 1);
+    }
+    if (e.key === "Escape") {
+      this.value = "";
+      if (state.tab === "table") { state.search = ""; renderTable(); this.blur(); return; }
+      runSearch("");
+      this.blur();
+    }
+  });
+
+  document.getElementById("btnNext").addEventListener("click", function () { jumpMatch(1); });
+  document.getElementById("btnPrev").addEventListener("click", function () { jumpMatch(-1); });
+
+  // 全局快捷键
+  document.addEventListener("keydown", function (e) {
+    var tag = (e.target.tagName || "").toLowerCase();
+    var inField = tag === "input" || tag === "textarea";
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      // 类型 / 原文视图交给浏览器原生查找，搜索框此时是隐藏的
+      if (state.tab === "type" || state.tab === "raw") return;
+      e.preventDefault();
+      els.search.focus();
+      els.search.select();
+      return;
+    }
+    if (inField) return;
+
+    var sel = document.querySelector(".row.sel");
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      collectRows();
+      if (!state.rowEls.length) return;
+      var idx = sel ? state.rowEls.indexOf(sel) : -1;
+      idx += (e.key === "ArrowDown" ? 1 : -1);
+      if (idx < 0) idx = 0;
+      if (idx >= state.rowEls.length) idx = state.rowEls.length - 1;
+      selectRow(state.rowEls[idx]);
+      state.rowEls[idx].scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (e.key === "ArrowRight" && sel && isContainer(sel.__value)) {
+      e.preventDefault(); toggleAt(sel, true); return;
+    }
+    if (e.key === "ArrowLeft" && sel && isContainer(sel.__value)) {
+      e.preventDefault(); toggleAt(sel, false); return;
+    }
+    if (e.key === "Enter" && sel) {
+      e.preventDefault();
+      var mode = (e.ctrlKey || e.metaKey) ? "path" : (e.shiftKey ? "name" : "value");
+      copyRow(sel, mode);
+      return;
+    }
+  });
+
+  /* ================= 工具栏 ================= */
+
+  var depthBtns = [];
+  depthBtns = Array.prototype.slice.call(document.querySelectorAll(".dbtn"));
+
+  function syncDepthBtns() {
+    if (!depthBtns || !depthBtns.length) return;
+    depthBtns.forEach(function (b) {
+      b.classList.toggle("on", state.openDepth === parseInt(b.dataset.depth, 10));
+    });
+  }
+
+  depthBtns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (!state.hasValue) return;
+      var n = parseInt(b.dataset.depth, 10);
+      clearSearch();
+      // 再点同一个按钮＝取消深度限制，回到默认展开
+      state.openDepth = state.openDepth === n ? null : n;
+      state.allOpen = false;
+      state.collapseAll = false;
+      state.userOpen = {};
+      state.userClose = {};
+      renderTree();
+      syncDepthBtns();
+      toast(state.openDepth ? "只展开到第 " + n + " 层" : "已恢复默认展开深度");
+    });
+  });
+
+  function clearSearch() {
+    if (!state.search && !els.search.value) return;
+    state.search = "";
+    els.search.value = "";
+    state.matchIds = {};
+    state.expandIds = {};
+    state.matchOrder = [];
+    state.curMatch = -1;
+    els.matchInfo.textContent = "";
+  }
+
+  document.getElementById("btnExpand").addEventListener("click", function () {
+    if (!state.hasValue) return;
+    clearSearch();
+    state.allOpen = true;
+    state.collapseAll = false;
+    state.openDepth = null;
+    state.userClose = {};
+    state.userOpen = {};
+    renderTree();
+    syncDepthBtns();
+    if (state.rows >= MAX_ROWS) toast("内容较多，已展开到渲染上限");
+  });
+
+  document.getElementById("btnCollapse").addEventListener("click", function () {
+    if (!state.hasValue) return;
+    clearSearch();
+    state.allOpen = false;
+    state.collapseAll = true;
+    state.openDepth = null;
+    state.userOpen = {};
+    state.userClose = {};
+    renderTree();
+    syncDepthBtns();
+  });
+
+  document.getElementById("btnClear").addEventListener("click", function () {
+    els.input.value = "";
+    state.hasValue = false;
+    state.value = undefined;
+    state.search = "";
+    state.tableArr = null;
+    state.tablePath = [];
+    state.tableList = [];
+    state.openDepth = null;
+    state.selPath = null;
+    els.search.value = "";
+    els.matchInfo.textContent = "";
+    els.statusRight.textContent = "";
+    setStatus("等待输入…", "");
+    renderAll();
+    els.input.focus();
+  });
+
+  document.getElementById("btnSample").addEventListener("click", function () {
+    els.input.value = SAMPLE;
+    parseNow();
+  });
+
+  document.getElementById("btnFormat").addEventListener("click", function () {
+    if (!els.input.value.trim()) return;
+    var res = tryParse(els.input.value);
+    if (!res.ok) { setStatus(errorDetail(els.input.value, res.error), "err"); return; }
+    els.input.value = JSON.stringify(res.value, null, 2);
+    parseNow();
+  });
+
+  document.getElementById("btnMinify").addEventListener("click", function () {
+    if (!els.input.value.trim()) return;
+    var res = tryParse(els.input.value);
+    if (!res.ok) { setStatus(errorDetail(els.input.value, res.error), "err"); return; }
+    els.input.value = JSON.stringify(res.value);
+    parseNow();
+  });
+
+  document.getElementById("btnCopyAll").addEventListener("click", function () {
+    if (!state.hasValue) { toast("没有可复制的内容"); return; }
+    copyText(JSON.stringify(state.value, null, 2)).then(function (ok) {
+      toast(ok ? "已复制完整 JSON" : "复制失败");
+    });
+  });
+
+  document.getElementById("btnDownload").addEventListener("click", function () {
+    if (!state.hasValue) { toast("没有可下载的内容"); return; }
+    downloadText(JSON.stringify(state.value, null, 2), "data.json", "application/json");
+    toast("已下载 data.json");
+  });
+
+  document.getElementById("btnImport").addEventListener("click", function () {
+    els.fileInput.click();
+  });
+
+  els.fileInput.addEventListener("change", function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    readFile(f);
+    this.value = "";
+  });
+
+  function readFile(file) {
+    if (file.size > 80 * 1024 * 1024) { toast("文件超过 80MB，可能卡顿"); }
+    var reader = new FileReader();
+    reader.onload = function () {
+      els.input.value = String(reader.result || "");
+      parseNow();
+      toast("已载入 " + file.name + "（" + fmtSize(file.size) + "）");
+    };
+    reader.onerror = function () { toast("读取失败"); };
+    reader.readAsText(file, "utf-8");
+  }
+
+  // 标签切换
+  var tabs = document.querySelectorAll(".tab");
+
+  function switchTab(name) {
+    state.tab = name;
+    Array.prototype.forEach.call(tabs, function (x) {
+      x.classList.toggle("on", x.dataset.tab === name);
+    });
+    var isRaw = name === "raw";
+    var isTable = name === "table";
+    var isType = name === "type";
+    els.raw.classList.toggle("show", isRaw);
+    els.tableWrap.classList.toggle("show", isTable);
+    els.typeWrap.classList.toggle("show", isType);
+    var isTree = !(isRaw || isTable || isType);
+    els.tree.style.display = isTree ? "" : "none";
+    els.searchbar.style.display = (isRaw || isType) ? "none" : "";
+    els.crumbar.style.display = isTable ? "none" : "";
+    els.search.style.flex = isTable ? "1 1 auto" : "";
+    els.depthGroup.style.display = isTree ? "" : "none";
+    document.getElementById("btnExpand").style.display = isTree ? "" : "none";
+    document.getElementById("btnCollapse").style.display = isTree ? "" : "none";
+    els.btnPrev.style.display = (isTable || isType) ? "none" : "";
+    els.btnNext.style.display = (isTable || isType) ? "none" : "";
+
+    if (isRaw) {
+      els.raw.textContent = state.hasValue ? JSON.stringify(state.value, null, 2) : "";
+    }
+    if (isTable) {
+      if (!state.tableArr) autoPickTable();
+      els.matchInfo.textContent = "";
+      renderTable();
+    }
+    if (isType) renderTypes();
+    els.search.placeholder = isTable ? "过滤表格行…（Ctrl+F）"
+      : isType ? "搜索…（Ctrl+F）" : "搜索 key 或值…（Ctrl+F）";
+  }
+
+  Array.prototype.forEach.call(tabs, function (t) {
+    t.addEventListener("click", function () {
+      if (t.dataset.tab === "table" && !state.tableArr) autoPickTable();
+      switchTab(t.dataset.tab);
+    });
+  });
+
+  // 主题
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    try { localStorage.setItem("jv-theme", t); } catch (e) {}
+  }
+  document.getElementById("btnTheme").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    applyTheme(cur === "dark" ? "light" : "dark");
+  });
+  try {
+    var saved = localStorage.getItem("jv-theme");
+    if (saved) applyTheme(saved);
+    var savedMode = localStorage.getItem("jv-typemode");
+    if (savedMode) { state.typeMode = savedMode; els.typeMode.value = savedMode; }
+  } catch (e) {}
+
+  /* ================= 分栏拖拽 ================= */
+
+  (function () {
+    var dragging = false;
+    els.gutter.addEventListener("pointerdown", function (e) {
+      dragging = true;
+      els.gutter.classList.add("drag");
+      els.gutter.setPointerCapture(e.pointerId);
+      document.body.style.userSelect = "none";
+    });
+    els.gutter.addEventListener("pointermove", function (e) {
+      if (!dragging) return;
+      var total = document.querySelector(".split").getBoundingClientRect().width;
+      var x = e.clientX - document.querySelector(".split").getBoundingClientRect().left;
+      var pct = Math.min(70, Math.max(18, (x / total) * 100));
+      els.inputPane.style.flex = "0 0 " + pct + "%";
+      els.inputPane.style.width = pct + "%";
+    });
+    function stop() {
+      if (!dragging) return;
+      dragging = false;
+      els.gutter.classList.remove("drag");
+      document.body.style.userSelect = "";
+      try {
+        localStorage.setItem("jv-split", els.inputPane.style.flexBasis || "38%");
+      } catch (e) {}
+    }
+    els.gutter.addEventListener("pointerup", stop);
+    els.gutter.addEventListener("pointercancel", stop);
+    try {
+      var w = localStorage.getItem("jv-split");
+      if (w) { els.inputPane.style.flex = "0 0 " + w; els.inputPane.style.width = w; }
+    } catch (e) {}
+  })();
+
+  /* ================= 拖入文件 ================= */
+
+  var dragDepth = 0;
+  window.addEventListener("dragenter", function (e) {
+    e.preventDefault();
+    dragDepth++;
+    document.body.classList.add("dragover");
+  });
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("dragleave", function (e) {
+    e.preventDefault();
+    dragDepth--;
+    if (dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragover"); }
+  });
+  window.addEventListener("drop", function (e) {
+    e.preventDefault();
+    dragDepth = 0;
+    document.body.classList.remove("dragover");
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) readFile(f);
+  });
+
+  /* ================= 示例数据 ================= */
+
+  var SAMPLE = JSON.stringify({
+    code: 0,
+    message: "ok",
+    data: {
+      user: {
+        id: 10086,
+        name: "Teddy",
+        email: "teddy@example.com",
+        city: "青岛",
+        active: true,
+        vip: null,
+        tags: ["前端", "全栈", "硬件"],
+        profile: {
+          birthday: "1995-08-16",
+          height: 178,
+          github: "https://github.com/teddy",
+          bio: "Next.js 全栈开发者，喜欢折腾老机器。"
+        }
+      },
+      orders: [
+        { orderId: "A20261123001", amount: 128.5, status: "paid", items: [{ sku: "KB-01", qty: 1 }, { sku: "MS-02", qty: 2 }] },
+        { orderId: "A20261123002", amount: 63.0, status: "pending", items: [{ sku: "RAM-DDR3-8G", qty: 1 }] },
+        { orderId: "A20261123003", amount: 999.9, status: "refunded", items: [] }
+      ],
+      meta: { page: 1, pageSize: 20, total: 3, hasNext: false }
+    }
+  }, null, 2);
+
+  /* ================= 启动 ================= */
+
+  setStatus("等待输入…", "");
+  renderAll();
+  els.input.focus();
+  if (state.raw && !state.hasValue) setStatus("等待输入…", "");
+
+})();
+</script>
+</body>
+</html>

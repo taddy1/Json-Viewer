@@ -1,0 +1,162 @@
+{
+  "policyNo": "POL202611230000871",
+  "productCode": "CI-2024-A",
+  "productName": "安享康健终身重大疾病保险",
+  "channel": "保险经纪人",
+  "status": "inForce",
+  "effectiveDate": "2026-01-01",
+  "expiryDate": "终身",
+  "freeLookDays": 15,
+  "isRenewable": false,
+  "discount": null,
+  "clauses": {
+    "version": "2024版",
+    "summary": "本保险合同的保险责任分为重大疾病保险金、中症疾病保险金、轻症疾病保险金三项。被保险人自本合同生效之日起九十日内，因意外伤害以外的原因经医院确诊初次发生本合同约定的重大疾病的，本公司不承担保险责任，仅无息退还已交保险费。等待期届满后，被保险人经二级及以上公立医院确诊初次发生本合同约定的重大疾病的，本公司按基本保险金额给付重大疾病保险金，同时本合同终止。被保险人因同一疾病或同次意外伤害事故，同时符合多项保险责任给付条件的，本公司仅按其中给付比例最高的一项承担保险责任。",
+    "exclusions": [
+      "投保人对被保险人的故意杀害、故意伤害",
+      "被保险人自伤、自杀或故意犯罪",
+      "战争、军事冲突、暴乱或武装叛乱",
+      "核爆炸、核辐射或核污染"
+    ]
+  },
+  "holder": {
+    "name": "王志远",
+    "idType": "居民身份证",
+    "idNo": "3702**********1234",
+    "mobile": "138****6621",
+    "relationship": "本人",
+    "verified": true
+  },
+  "insured": {
+    "name": "王志远",
+    "birthday": "1984-06-18",
+    "gender": "male",
+    "age": 42,
+    "smoker": false,
+    "socialInsurance": "城镇职工基本医疗保险",
+    "occupation": {
+      "code": "IT-204",
+      "title": "软件工程师",
+      "category": 2,
+      "industry": "信息技术服务业"
+    },
+    "contact": {
+      "mobile": "138****6621",
+      "email": "wangzhiyuan@example.com",
+      "preferred": "sms",
+      "address": {
+        "province": "山东省",
+        "city": "青岛市",
+        "district": "市南区",
+        "street": "香港中路 76 号 2101 室",
+        "postalCode": "266071"
+      }
+    },
+    "health": {
+      "heightCm": 175,
+      "weightKg": 72.5,
+      "bmi": 23.7,
+      "bloodType": "O",
+      "chronicDiseases": [],
+      "familyHistory": ["高血压（父亲）", "糖尿病（母亲）"],
+      "lastCheckup": {
+        "date": "2026-03-12",
+        "hospital": "青岛市市立医院",
+        "bloodPressure": "126/82",
+        "bloodSugar": 5.4,
+        "ecg": "窦性心律，未见异常",
+        "abnormal": false
+      }
+    }
+  },
+  "coverage": {
+    "planName": "基础计划 A",
+    "sumAssured": 500000,
+    "deductible": 10000,
+    "waitingPeriodDays": 90,
+    "riders": [
+      {
+        "riderCode": "R-CI-01",
+        "riderName": "重大疾病保险金",
+        "sumAssured": 500000,
+        "payoutRatio": 1.0,
+        "waitingPeriodDays": 90,
+        "coveredScope": "重大疾病 120 种、中症疾病 25 种、轻症疾病 45 种"
+      },
+      {
+        "riderCode": "R-MED-02",
+        "riderName": "住院医疗保险金",
+        "sumAssured": 2000000,
+        "payoutRatio": 1.0,
+        "deductible": 10000,
+        "reimburseRatio": 1.0,
+        "coveredScope": "住院医疗费用、特殊门诊费用、门诊手术费用"
+      },
+      {
+        "riderCode": "R-ACC-03",
+        "riderName": "意外伤害保险金",
+        "sumAssured": 300000,
+        "payoutRatio": 1.0,
+        "waitingPeriodDays": 0,
+        "coveredScope": "意外身故、意外伤残"
+      }
+    ]
+  },
+  "premium": {
+    "currency": "CNY",
+    "annual": 8640,
+    "paymentTerm": "20 年缴",
+    "paymentMode": "年缴",
+    "nextDueDate": "2027-01-01",
+    "totalPaid": 8640,
+    "installments": [
+      {
+        "period": 1,
+        "dueDate": "2026-01-01",
+        "amount": 8640,
+        "paid": true,
+        "paidAt": "2025-12-28T09:12:33+08:00",
+        "method": "银行卡代扣",
+        "bank": "招商银行",
+        "cardTail": "8842",
+        "receiptNo": "RC2025122800017"
+      }
+    ]
+  },
+  "claims": [
+    {
+      "claimNo": "CLM202609180002",
+      "status": "审核中",
+      "accidentDate": "2026-08-30",
+      "reportDate": "2026-09-01",
+      "amountClaimed": 32450.8,
+      "amountApproved": null,
+      "incident": {
+        "type": "疾病住院",
+        "description": "急性心肌梗死，行冠脉支架植入术",
+        "hospitalName": "青岛大学附属医院",
+        "hospitalLevel": "三级甲等",
+        "department": "心血管内科",
+        "admittedAt": "2026-08-30",
+        "dischargedAt": "2026-09-07",
+        "stayDays": 8
+      },
+      "documents": ["住院病历首页", "费用明细清单", "出院小结", "诊断证明书"],
+      "review": {
+        "reviewer": "理赔专员 李敏",
+        "submittedAt": "2026-09-02T10:12:00+08:00",
+        "result": "pending",
+        "remark": "材料已收齐，等待核赔结论",
+        "needSupplement": false
+      }
+    }
+  ],
+  "statusHistory": [
+    {
+      "2025-12-20": "投保申请已提交",
+      "2025-12-28": "首期保费已缴纳",
+      "2026-01-01": "合同生效",
+      "2026-08-25": "被保险人发生保险事故"
+    }
+  ]
+}
