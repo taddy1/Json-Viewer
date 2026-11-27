@@ -315,7 +315,9 @@ html[data-theme="dark"] .typescroll::-webkit-scrollbar-thumb{background:#39424e;
   background:var(--panel);color:var(--text);font-family:var(--mono);font-size:11px;outline:none;
 }
 .rootbox input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
-.tablebar .tiphint{color:var(--text-faint);}
+.tablebar .tiphint{color:var(--text-faint);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.tablebar .flatbox{display:inline-flex;align-items:center;gap:4px;color:var(--text-faint);flex:0 0 auto;}
+.tablebar .flatbox .tablesel{height:22px;max-width:66px;}
 .tablescroll{flex:1;overflow:auto;}
 .grid{
   border-collapse:separate;border-spacing:0;font-family:var(--mono);
@@ -496,6 +498,15 @@ html[data-theme="dark"] .toast{background:#2c3541;}
         <span class="srcpath" id="tableInfo"></span>
         <span class="grow"></span>
         <span class="tiphint" id="tableHint"></span>
+        <label class="flatbox" title="平铺嵌套：对象展开成 a.b 列，对象数组按索引展开成 items[0].sku，基本类型数组用「 | 」合并；每个对象数组最多展开 20 个元素（超出部分另存为 JSON 列）">
+          <span>平铺</span>
+          <select class="tablesel" id="tableFlat">
+            <option value="0">关闭</option>
+            <option value="1" selected>1 层</option>
+            <option value="2">2 层</option>
+            <option value="3">3 层</option>
+          </select>
+        </label>
         <button class="btn sm" id="btnCsv">导出 CSV</button>
       </div>
       <div class="tablescroll" id="tableScroll"></div>
@@ -895,6 +906,7 @@ var Masker = (function () {
     tableHint: document.getElementById("tableHint"),
     tablePicker: document.getElementById("tablePicker"),
     tableCount: document.getElementById("tableCount"),
+    tableFlat: document.getElementById("tableFlat"),
     typeWrap: document.getElementById("typeWrap"),
     typeMode: document.getElementById("typeMode"),
     typeCode: document.getElementById("typeCode"),
@@ -937,7 +949,9 @@ var Masker = (function () {
     tableList: [],         // 全树所有可表格化的数组（按行数降序）
     tableSort: { col: -1, dir: 0 },
     tableCols: [],
-    tableRows: [],         // 排序 + 过滤后的行
+    tableRows: [],         // 排序 + 过滤后的原始行（复制整行 JSON 用）
+    tableView: [],         // 与 tableRows 同序的平铺行（渲染 + 导出用）
+    tableFlatten: 1,       // 平铺层数：0 关闭 / 1~3
     typeMode: "ts"         // 类型输出格式：ts / type / zod
   };
 
@@ -1511,6 +1525,49 @@ var Masker = (function () {
     return cols;
   }
 
+  function isPrimitiveArray(v) {
+    if (!Array.isArray(v)) return false;
+    for (var i = 0; i < v.length; i++) {
+      var x = v[i];
+      if (x !== null && typeof x === "object") return false;
+    }
+    return true;
+  }
+
+  // 把一行对象平铺成扁平的 key（对象与对象数组同规则：按 maxDepth 逐层展开）：
+  //   { a: { b: 1 } }            → "a.b" = 1          （对象展开一层）
+  //   { tags: ["x", "y"] }       → "tags" = "x | y"   （基本类型数组用 | 合并）
+  //   { items: [{sku:"A"}] }     → "items[0].sku"     （对象数组按索引展开；嵌套对象再按剩余层数展开）
+  // 每个对象数组最多展开 ARR_CAP 个元素，超出的部分保留原始数组（name 列存 JSON），不静默丢数据。
+  // 超出层数或无法展开的值原样保留（渲染/CSV 时会变成 JSON 字符串）
+  var ARR_CAP = 20;
+
+  function flattenRow(obj, maxDepth) {
+    if (!isPlainObj(obj)) return obj;
+    var out = {};
+    (function walk(o, prefix, lvl) {
+      for (var k in o) {
+        if (!Object.prototype.hasOwnProperty.call(o, k)) continue;
+        var v = o[k];
+        var name = prefix ? prefix + "." + k : k;
+        if (lvl < maxDepth && isPlainObj(v)) { walk(v, name, lvl + 1); continue; }
+        if (isPrimitiveArray(v)) { out[name] = v.join(" | "); continue; }
+        if (Array.isArray(v) && lvl < maxDepth) {
+          var cap = Math.min(v.length, ARR_CAP);
+          for (var ai = 0; ai < cap; ai++) {
+            var el = v[ai], sub = name + "[" + ai + "]";
+            if (isPlainObj(el)) walk(el, sub, lvl + 1);
+            else out[sub] = el;
+          }
+          if (v.length > cap) out[name] = v;   // 超限时保留原始数组，避免数据被截断后无从查证
+          continue;
+        }
+        out[name] = v;
+      }
+    })(obj, "", 0);
+    return out;
+  }
+
   function tableCell(v) {
     if (v === undefined) return { text: "—", cls: "miss" };
     if (v === null) return { text: "null", cls: "t-nul" };
@@ -1539,37 +1596,51 @@ var Masker = (function () {
       return;
     }
 
-    var cols = collectColumns(arr);
+    var depth = state.tableFlatten || 0;
+    // 先平铺再收集列：嵌套对象被拆成 a.b 这样的列
+    var view = [];
+    for (var iv = 0; iv < arr.length; iv++) {
+      view.push(depth ? flattenRow(arr[iv], depth) : arr[iv]);
+    }
+
+    var cols = collectColumns(view);
     state.tableCols = cols;
 
     var q = state.search.toLowerCase();
-    var rows = [];
-    for (var i = 0; i < arr.length; i++) {
+    var order = [];
+    for (var i = 0; i < view.length; i++) {
       if (q) {
         var hit = false;
         for (var c = 0; c < cols.length; c++) {
-          var cv = arr[i] ? arr[i][cols[c]] : undefined;
+          var cv = view[i] ? view[i][cols[c]] : undefined;
           if (cv === undefined || cv === null) continue;
           var s0 = typeof cv === "object" ? JSON.stringify(cv) : String(cv);
           if (s0.toLowerCase().indexOf(q) !== -1) { hit = true; break; }
         }
         if (!hit) continue;
       }
-      rows.push(arr[i]);
+      order.push(i);
     }
 
     var so = state.tableSort;
     if (so.col >= 0 && so.dir) {
       var key = cols[so.col];
-      rows.sort(function (a, b) {
-        var x = a ? a[key] : undefined, y = b ? b[key] : undefined;
+      order.sort(function (ia, ib) {
+        var x = view[ia] ? view[ia][key] : undefined, y = view[ib] ? view[ib][key] : undefined;
         if (x === undefined || x === null) return 1;
         if (y === undefined || y === null) return -1;
         if (typeof x === "number" && typeof y === "number") return (x - y) * so.dir;
         return String(x).localeCompare(String(y), "zh-CN") * so.dir;
       });
     }
-    state.tableRows = rows;
+
+    var rows = [], rawRows = [];
+    for (var oi = 0; oi < order.length; oi++) {
+      rows.push(view[order[oi]]);
+      rawRows.push(arr[order[oi]]);
+    }
+    state.tableView = rows;
+    state.tableRows = rawRows;
 
     var html = ['<table class="grid"><thead><tr><th class="rownum">#</th>'];
     for (var ci = 0; ci < cols.length; ci++) {
@@ -1605,11 +1676,11 @@ var Masker = (function () {
     els.tableInfo.title = "点击回到树形视图";
     els.tableHint.textContent = rows.length > MAX_TABLE_ROWS
       ? "仅渲染前 " + MAX_TABLE_ROWS + " 行，导出 CSV 可拿全量"
-      : "点单元格复制 · 点表头排序";
+      : "点格复制 · 点表头排序";
 
     // 横向溢出时给个提示
     if (host.scrollWidth > host.clientWidth + 4) {
-      els.tableHint.textContent = "↔ 可横向滚动 · 点单元格复制 · 点行号复制整行";
+      els.tableHint.textContent = "↔ 可横滚";
     }
   }
 
@@ -1633,12 +1704,12 @@ var Masker = (function () {
   }
 
   function exportCsv() {
-    var cols = state.tableCols, rows = state.tableRows;
+    var cols = state.tableCols, rows = state.tableView;
     if (!cols.length || !rows.length) { toast("没有可导出的数据"); return; }
     var lines = [cols.map(csvEscape).join(",")];
     for (var i = 0; i < rows.length; i++) {
       var line = [];
-      for (var j = 0; j < cols.length; j++) line.push(csvEscape(csvCellText(rows[i][cols[j]])));
+      for (var j = 0; j < cols.length; j++) line.push(csvEscape(csvCellText(rows[i] ? rows[i][cols[j]] : undefined)));
       lines.push(line.join(","));
     }
     var csv = "\uFEFF" + lines.join("\r\n");
@@ -2000,7 +2071,8 @@ var Masker = (function () {
 
     var c = parseInt(td.dataset.c, 10);
     var col = state.tableCols[c];
-    var val = row[col];
+    var viewRow = state.tableView[r];
+    var val = viewRow ? viewRow[col] : undefined;
     copyText(copyPayload(val === undefined ? "" : val)).then(function (ok) {
       if (!ok) { toast("复制失败"); return; }
       td.classList.remove("flash");
@@ -2021,6 +2093,15 @@ var Masker = (function () {
   });
 
   els.btnCsv.addEventListener("click", exportCsv);
+
+  if (els.tableFlat) {
+    els.tableFlat.addEventListener("change", function () {
+      state.tableFlatten = parseInt(this.value, 10) || 0;
+      state.tableSort = { col: -1, dir: 0 };   // 列变了，排序索引不再对应，重置
+      try { localStorage.setItem("jv-flat", String(state.tableFlatten)); } catch (e) {}
+      renderTable();
+    });
+  }
 
   /* ================= 展开 / 折叠 ================= */
 
@@ -2783,6 +2864,12 @@ var Masker = (function () {
     if (saved) applyTheme(saved);
     var savedMode = localStorage.getItem("jv-typemode");
     if (savedMode) { state.typeMode = savedMode; els.typeMode.value = savedMode; }
+    var savedFlat = localStorage.getItem("jv-flat");
+    if (savedFlat !== null && els.tableFlat) {
+      var fd = parseInt(savedFlat, 10) || 0;
+      state.tableFlatten = fd;
+      els.tableFlat.value = String(fd);
+    }
   } catch (e) {}
 
   /* ================= 分栏拖拽 ================= */
